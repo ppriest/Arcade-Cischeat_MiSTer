@@ -1,0 +1,4 @@
+QUARTUS_VERSION = "17.0"
+# Cischeat_stp is the instrumented revision (ISSP probes, OSD debug page); Cischeat the release.
+PROJECT_REVISION = "Cischeat_stp"
+PROJECT_REVISION = "Cischeat"
