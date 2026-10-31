@@ -1,0 +1,18 @@
+set_global_assignment -name FAMILY "Cyclone V"
+set_global_assignment -name DEVICE 5CSEBA6U23I7
+set_global_assignment -name TOP_LEVEL_ENTITY video_area_top
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name OPTIMIZATION_MODE "HIGH PERFORMANCE EFFORT"
+set_global_assignment -name SEED 1
+set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
+set_global_assignment -name SYSTEMVERILOG_FILE ../../video/ms1_tmap_line.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../video/jaleco_road_line.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../video/jaleco_zoomspr_line.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../video/line_buffer.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../video/cischeat_mixer.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../video/cischeat_video.sv
+set_global_assignment -name SYSTEMVERILOG_FILE video_area_top.sv
+set_global_assignment -name SDC_FILE video_area.sdc
+# Virtual pins: the pad ring must not enter the measurement.
+set_instance_assignment -name VIRTUAL_PIN ON -to *
+set_global_assignment -name LAST_QUARTUS_VERSION "17.0.2 Lite Edition"

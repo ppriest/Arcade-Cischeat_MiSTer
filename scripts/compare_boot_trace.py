@@ -97,10 +97,10 @@ def cmd_replay(game):
     return 0
 
 
-def cmd_compare(game):
+def cmd_compare(game, rtl_path=None):
     base = REPO / "debug" / f"{game}-boot"
     raw_mame = load(base / f"{game}_boot.trace")
-    raw_rtl = load(base / f"{game}_rtl.trace")
+    raw_rtl = load(rtl_path or base / f"{game}_rtl.trace")
     if not raw_rtl:
         sys.exit("the RTL trace is empty -- did the bench run?")
     mame = merge_halves(raw_mame)
@@ -184,8 +184,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["replay", "compare"])
     ap.add_argument("game")
+    ap.add_argument("--rtl", type=Path, help="RTL trace (default <set>_rtl.trace)")
     a = ap.parse_args()
-    return cmd_replay(a.game) if a.cmd == "replay" else cmd_compare(a.game)
+    return cmd_replay(a.game) if a.cmd == "replay" else cmd_compare(a.game, a.rtl)
 
 
 if __name__ == "__main__":

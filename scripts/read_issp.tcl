@@ -19,6 +19,14 @@
 # By convention source bit 0 pulsed is the counter clear.
 set fields_F {
     {frames           0  15 dec}
+    {cpu_addr_w      16  38 hex}
+    {cpu_cycles      39  54 dec}
+    {video_overrun   55  55 bit}
+    {ldr_active      56  56 bit}
+    {rom_loaded      57  57 bit}
+    {core_reset      58  58 bit}
+    {ioctl_download  59  59 bit}
+    {pause           60  60 bit}
     {pll_locked     127 127 bit}
 }
 # ---------------------------------------------------------------------------

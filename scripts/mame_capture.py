@@ -69,6 +69,14 @@ def spec(table, names=None):
                     for n, (lo, hi) in table.items() if names is None or n in names)
 
 
+def extra_read_spec(table):
+    """Encode read ranges owned by other CPU address spaces for capture.lua."""
+    return ",".join(
+        f"{name}:{entry['cpu'].lstrip(':')}:{entry.get('space', 'program')}:"
+        f"{int(entry['range'][0], 16):x}:{int(entry['range'][1], 16):x}"
+        for name, entry in table.items())
+
+
 def lua_env(r):
     return {"CORE_CPU": r["cpu"], "CORE_SPACE": r["space"],
             "CORE_BYTES": str(r["bus_bytes"]), "CORE_BIG": "1" if r["big_endian"] else "0"}
@@ -182,6 +190,8 @@ def main():
     ap.add_argument("--name", default=None, help="output label (default: the frame)")
     ap.add_argument("--seconds", type=int, default=None,
                     help="emulated seconds to run; default frame/60 + 10")
+    ap.add_argument("--coin", type=int, default=0,
+                    help="insert a coin at this frame, then start and drive")
     ap.add_argument("--out", default=None)
     ap.add_argument("--dip", action="append", default=[], metavar="NAME=SETTING",
                     help="set a DIP switch by its MAME field name before the game boots, "
@@ -205,7 +215,13 @@ def main():
     cmd = mame_cmd(exe, a.set, "capture.lua", mame_dir, extra)
     env = dict(os.environ, **lua_env(r), **lua_runner_env("capture.lua"),
                CORE_OUT=out.as_posix(), CORE_FRAME=str(a.frame),
-               CORE_READ=spec(r.get("read", {})), CORE_WTAP=spec(r.get("wtap", {})))
+               CORE_READ=spec(r.get("read", {})),
+               CORE_READ_EXTRA=extra_read_spec(r.get("read_extra", {})),
+               CORE_WTAP=spec(r.get("wtap", {})), CORE_COIN=str(a.coin),
+               CORE_IN_COIN=r.get("inputs", {}).get("coin", "Coin 1"),
+               CORE_IN_START=r.get("inputs", {}).get("start", "1 Player Start"),
+               CORE_IN_HOLD=r.get("inputs", {}).get("hold", "P1 Right"),
+               CORE_IN_PULSE=r.get("inputs", {}).get("pulse", "P1 Button 1"))
     print(f"{a.set} frame {a.frame} -> {out}")
     p = subprocess.run(cmd, cwd=mame_dir, env=env, capture_output=True, text=True, **NO_WINDOW)
     blob = p.stdout + p.stderr

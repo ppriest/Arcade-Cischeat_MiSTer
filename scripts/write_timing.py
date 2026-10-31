@@ -33,20 +33,34 @@ def run(game, skip, frames, coin=0, tag="", extra=""):
     r = regions()
     out = REPO / "debug" / "wtiming" / f"{game}{tag}.txt"
     out.parent.mkdir(parents=True, exist_ok=True)
+    run_dir = out.parent / f"{game}{tag}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    lua_error = run_dir / "lua_error.txt"
+    if lua_error.exists():
+        lua_error.unlink()
     table = {**r.get("read", {}), **r.get("wtap", {})}
     taps = spec(table, r.get("sweep"))
     if extra:
         taps = f"{taps},{extra}" if taps else extra
     inp = r.get("inputs", {})
     env = dict(os.environ, **lua_env(r), **lua_runner_env("wtiming.lua"),
-               WT_OUT=out.as_posix(), WT_TAPS=taps,
+               CORE_OUT=run_dir.as_posix(), WT_OUT=out.as_posix(), WT_TAPS=taps,
                WT_SKIP=str(skip), WT_FRAMES=str(frames), WT_COIN=str(coin), WT_SNAP="1",
                WT_IN_COIN=inp.get("coin", "Coin 1"), WT_IN_START=inp.get("start", "1 Player Start"),
                WT_IN_HOLD=inp.get("hold", "P1 Right"), WT_IN_PULSE=inp.get("pulse", "P1 Button 1"))
     cmd = mame_cmd(exe, game, "wtiming.lua", mame_dir,
                    ["-snapshot_directory", (out.parent / f"snap{tag}").as_posix(),
                     "-snapview", "native"])
-    subprocess.run(cmd, cwd=str(mame_dir), env=env, capture_output=True, timeout=3600, **NO_WINDOW)
+    p = subprocess.run(cmd, cwd=str(mame_dir), env=env, capture_output=True, text=True,
+                       timeout=3600, **NO_WINDOW)
+    if lua_error.exists():
+        sys.exit(f"write-timing Lua failed:\n{lua_error.read_text(encoding='utf-8')}")
+    if p.returncode:
+        tail = "\n".join((p.stdout + p.stderr).strip().splitlines()[-15:])
+        sys.exit(f"MAME exited with status {p.returncode}.\n{tail}")
+    if not out.exists():
+        tail = "\n".join((p.stdout + p.stderr).strip().splitlines()[-15:])
+        sys.exit(f"write-timing produced no result file: {out}\n{tail}")
     return out
 
 

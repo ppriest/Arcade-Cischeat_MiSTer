@@ -187,9 +187,21 @@ def parse_ports(body, all_blocks, missing, depth=0):
         m = re.match(rf'PORT_DIPNAME\(\s*{_NUM}\s*,\s*{_NUM}\s*,\s*(.*?)\s*\)\s*(?:PORT_\w+.*)?$',
                      line)
         if m:
-            if "PORT_CONDITION" in line:
-                sys.exit(f"conditional PORT_DIPNAME is not handled: {line}")
+            # a conditional PORT_DIPNAME is one of several fields on the same
+            # bits; only the one whose condition holds at the defaults is kept
+            # (_resolve). The 4-tuple stays the switch, the condition rides in
+            # the settings map under "dipcond".
+            dcond = None
+            md = re.search(rf'PORT_CONDITION\(\s*"(\w+)"\s*,\s*{_NUM}\s*,\s*(EQUALS|NOTEQUALS|GREATERTHAN|NOTGREATERTHAN|LESSTHAN|NOTLESSTHAN)\s*,\s*{_NUM}\s*\)',
+                           line)
+            if md:
+                dcond = (md.group(1), _num(md.group(2)), md.group(3), _num(md.group(4)))
+                line = line[:md.start()].rstrip()
+                m = re.match(rf'PORT_DIPNAME\(\s*{_NUM}\s*,\s*{_NUM}\s*,\s*(.*?)\s*\)\s*(?:PORT_\w+.*)?$',
+                             line)
             last = (_label(m.group(3), missing), _num(m.group(1)), _num(m.group(2)), {})
+            if dcond:
+                last[3]["dipcond"] = dcond
             # PORT_MODIFY: a field replaces the included fields its mask
             # overlaps, as ioport's field_alloc does
             if modifying:
@@ -201,7 +213,7 @@ def parse_ports(body, all_blocks, missing, depth=0):
         # applies only while that switch reads so. Split off first -- a lazy
         # match to the last ")" otherwise takes the condition into the label.
         cond = None
-        mc = re.search(rf'\)\s*PORT_CONDITION\(\s*"(\w+)"\s*,\s*{_NUM}\s*,\s*(EQUALS|NOTEQUALS)\s*,\s*{_NUM}\s*\)\s*$',
+        mc = re.search(rf'\)\s*PORT_CONDITION\(\s*"(\w+)"\s*,\s*{_NUM}\s*,\s*(EQUALS|NOTEQUALS|GREATERTHAN|NOTGREATERTHAN|LESSTHAN|NOTLESSTHAN)\s*,\s*{_NUM}\s*\)\s*$',
                        line)
         if mc:
             cond = (mc.group(1), _num(mc.group(2)), mc.group(3), _num(mc.group(4)))
@@ -246,6 +258,13 @@ def parse_ports(body, all_blocks, missing, depth=0):
             continue
 
         # Not emitted as a switch, but its default is part of the byte.
+        m = re.match(rf'PORT_DIPUNKNOWN(?:_DIPLOC)?\(\s*{_NUM}\s*,\s*{_NUM}',
+                     line)
+        if m:
+            ports[cur].append(("(unknown)", _num(m.group(1)), _num(m.group(2)), None))
+            last = None
+            continue
+
         m = re.match(rf'PORT_DIPUNUSED(?:_DIPLOC)?\(\s*{_NUM}\s*,\s*{_NUM}',
                      line)
         if m:
@@ -266,8 +285,49 @@ def parse_ports(body, all_blocks, missing, depth=0):
             continue
 
     if depth == 0:
+        ports = _resolve(ports)
         ports = {k: [_fold(d, ports) for d in v] for k, v in ports.items()}
     return ports
+
+
+def _defaults(ports):
+    out = {}
+    for name, fields in ports.items():
+        v = 0
+        for _, mask, dflt, _ in fields:
+            v = (v & ~mask) | (dflt & mask)
+        out[name] = v
+    return out
+
+
+def _test(op, v, val):
+    """ioport_condition::eval"""
+    return {"EQUALS": v == val, "NOTEQUALS": v != val,
+            "GREATERTHAN": v > val, "NOTGREATERTHAN": v <= val,
+            "LESSTHAN": v < val, "NOTLESSTHAN": v >= val}[op]
+
+
+def _holds(cond, defaults):
+    port, mask, op, val = cond
+    return _test(op, defaults.get(port, 0) & mask, val)
+
+
+def _resolve(ports):
+    """Drop conditional PORT_DIPNAMEs whose condition fails at the defaults."""
+    defaults = _defaults(ports)
+    out = {}
+    for name, fields in ports.items():
+        kept = []
+        for f in fields:
+            st = f[3]
+            if st is not None and "dipcond" in st:
+                if not _holds(st["dipcond"], defaults):
+                    continue
+                st = {k: v for k, v in st.items() if k != "dipcond"}
+                f = (f[0], f[1], f[2], st)
+            kept.append(f)
+        out[name] = kept
+    return out
 
 
 def _short(label):
@@ -289,18 +349,24 @@ def _fold(dip, ports):
     if any(c[1][0] != port or c[1][1] != cmask for c in conds):
         sys.exit(f"'{name}': settings conditional on more than one switch")
     cdip = [d for d in ports.get(port, []) if d[1] == cmask and d[3] is not None]
-    if len(cdip) != 1 or bin(cmask).count("1") != 1:
-        sys.exit(f"'{name}': condition on {port} {cmask:#x} is not a one-bit switch")
+    if len(cdip) != 1:
+        sys.exit(f"'{name}': condition on {port} {cmask:#x} matches {len(cdip)} switches")
     cdef = cdip[0][2] & cmask
 
     def labels_when(bitval):
         out = {}
         for (_, (p, m, op, val)) in conds:
-            hit = (bitval == val) if op == "EQUALS" else (bitval != val)
+            hit = _test(op, bitval, val)
             if hit:
                 out.update(settings[("cond", (p, m, op, val))])
         return out
 
+    if bin(cmask).count("1") != 1:
+        # a multi-bit condition: the reading at that switch's default only
+        # (docs/HACKS.md, DIPs)
+        folded = {v: _short(lab) for v, lab in plain.items()}
+        folded.update({v: _short(lab) for v, lab in labels_when(cdef).items()})
+        return (name, mask, dflt, folded)
     first, second = labels_when(cdef), labels_when(cdef ^ cmask)
     folded = {v: _short(lab) for v, lab in plain.items()}
     for v in sorted(set(first) | set(second)):

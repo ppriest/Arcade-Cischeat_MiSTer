@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<misterromdescription>
+    <name>F-1 Grand Prix Star II</name>
+    <setname>f1gpstr2</setname>
+    <rbf>Cischeat</rbf>
+    <mameversion>0289</mameversion>
+    <year>1993</year>
+    <manufacturer>Jaleco</manufacturer>
+    <category>Arcade</category>
+    <rotation>horizontal</rotation>
+    <players>1</players>
+    <rom index="1"><part>03</part></rom>
+    <rom index="0" zip="f1gpstr2.zip" md5="none" address="0x30000000">
+        <!-- Raw sound program is bitswapped at load; sprite graphics are untangled at load. -->
+        <interleave output="16"><part name="9188a-27.125" crc="ee60b894" map="01"/><part name="9188a-22.92" crc="f229332b" map="10"/></interleave><interleave output="16"><part name="9188a-26.124" crc="8690bb79" map="01"/><part name="9188a-21.91" crc="c5a5807e" map="10"/></interleave><interleave output="16"><part name="9188a-16.70" crc="3b3d57a0" map="01"/><part name="9188a-11.46" crc="4d2afddf" map="10"/></interleave><part repeat="262144">00</part><interleave output="16"><part name="9188a-6.27" crc="68faa23b" map="01"/><part name="9188a-1.2" crc="e4d83b4f" map="10"/></interleave><part repeat="262144">00</part><interleave output="16"><part name="92116-5.116" crc="da16db49" map="01"/><part name="92116-6.117" crc="1f1e147a" map="10"/></interleave><interleave output="16"><part name="92116-3.37" crc="2a541095" map="01"/><part name="92116-4.38" crc="70da1825" map="10"/></interleave><part name="9188a-25.123" crc="000c83d2"/><part name="9188a-28.152" crc="e734f8ea"/><part name="9188a-30.174" crc="c5906023"/><part repeat="131072">00</part><interleave output="16"><part name="92021-11.1" crc="fec883a7" map="01"/><part name="92021-12.2" crc="df283a7e" map="10"/></interleave><interleave output="16"><part name="92021-13.11" crc="1ceb593a" map="01"/><part name="92021-14.12" crc="673c2c61" map="10"/></interleave><interleave output="16"><part name="92021-15.21" crc="66e8b197" map="01"/><part name="92021-16.22" crc="1f672dd8" map="10"/></interleave><part name="92021-08.64" crc="54ff00c4"/><part name="92021-07.63" crc="258d524a"/><part name="92021-06.62" crc="f1423efe"/><part name="92021-05.61" crc="88bb6db1"/><part name="92021-04.17" crc="3a2e6b1e"/><part name="92021-03.16" crc="1f041f65"/><part name="92021-02.15" crc="d0582ad8"/><part name="92021-01.14" crc="06e50be4"/><part name="92116-2.18" crc="8c06cded"/><part name="92116-1.4" crc="8da37b9d"/>
+    </rom>
+    <switches default="FF,FD,F1,FF" base="0"><dip name="Coin A (EU FR)" bits="0,1,2" ids="2C/3C,1C/7C,1C/6C,1C/5C,1C/4C,1C/3C,1C/2C,1C/1C"/><dip name="Coin B (EU FR)" bits="3,4,5" ids="5C/1C,4C/1C,3C/1C,2C/1C,1C/4C,1C/3C,1C/2C,1C/1C"/><dip name="Free Play (EU &amp; FR)" bits="6" ids="On,Off"/><dip name="Region" bits="8,9" ids="France,Europe,USA,Japan"/><dip name="Difficulty" bits="10,11" ids="Easy,Very Hard,Hard,Normal"/><dip name="Infinite Time (Cheat)" bits="12" ids="On,Off"/><dip name="Demo Sounds" bits="13" ids="Off,On"/><dip name="Choose Race (US EU FR)" bits="14" ids="Off,On"/><dip name="Vibrations" bits="15" ids="Shake,Torque"/><dip name="This Unit Is" bits="16" ids="Master,Slave"/><dip name="Unit ID" bits="17,18,19" ids="1 (McLaren),2 (Williams),3 (Benetton),4 (Ferrari),5 (Tyrrell),6 (Lotus),7 (Jordan),8 (Ligier)"/></switches>
+
+    <buttons names="Brake,Gear Shift,Accelerator,-,-,-,-,-,Start,Coin,Pause,Service"
+             default="A,B,X,Y,Start,Select,L,R" count="4"/>
+</misterromdescription>

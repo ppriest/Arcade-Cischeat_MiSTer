@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<misterromdescription>
+    <name>Grand Prix Star (ver 2.0)</name>
+    <setname>f1gpstar2</setname>
+    <rbf>Cischeat</rbf>
+    <mameversion>0289</mameversion>
+    <year>1991</year>
+    <manufacturer>Jaleco</manufacturer>
+    <category>Arcade</category>
+    <rotation>horizontal</rotation>
+    <players>1</players>
+    <rom index="1"><part>02</part></rom>
+    <rom index="0" zip="f1gpstar2.zip|f1gpstar.zip" md5="none" address="0x30000000">
+        <!-- Raw sound program is bitswapped at load; sprite graphics are untangled at load. -->
+        <interleave output="16"><part name="9188a-27.v20" crc="0a9d3896" map="01"/><part name="9188a-22.v20" crc="de15c9ca" map="10"/></interleave><interleave output="16"><part name="9188a-26.v10" crc="0b76673f" map="01"/><part name="9188a-21.v10" crc="3e098d77" map="10"/></interleave><interleave output="16"><part name="9188a-16.v10" crc="ef0f7ca9" map="01"/><part name="9188a-11.v10" crc="de292ea3" map="10"/></interleave><part repeat="262144">00</part><interleave output="16"><part name="9188a-6.v10" crc="18ba0340" map="01"/><part name="9188a-1.v10" crc="109d2913" map="10"/></interleave><part repeat="262144">00</part><part repeat="524288">00</part><interleave output="16"><part name="9190a-2.v11" crc="acb2fd80" map="01"/><part name="9190a-1.v11" crc="7cccadaf" map="10"/></interleave><part name="90015-31.r56" crc="0c8f0e2b"/><part name="90015-32.r57" crc="9c921cfb"/><part name="9188a-30.v10" crc="0ef1fbf1"/><part repeat="131072">00</part><interleave output="16"><part name="90015-21.r46" crc="6f30211f" map="01"/><part name="90015-22.r47" crc="05a9a5da" map="10"/></interleave><interleave output="16"><part name="90015-23.r48" crc="58e9c6d2" map="01"/><part name="90015-24.r49" crc="abd6c91d" map="10"/></interleave><interleave output="16"><part name="90015-25.r50" crc="7ded911f" map="01"/><part name="90015-26.r51" crc="18a6c663" map="10"/></interleave><interleave output="16"><part name="90015-27.r52" crc="7378c82f" map="01"/><part name="90015-28.r53" crc="9944dacd" map="10"/></interleave><interleave output="16"><part name="90015-29.r54" crc="2cdec370" map="01"/><part name="90015-30.r55" crc="47e37604" map="10"/></interleave><part repeat="1048576">00</part><part name="90015-05.w10" crc="8eb48a23"/><part name="90015-06.w11" crc="32063a68"/><part name="90015-07.w12" crc="0d0d54f3"/><part name="90015-08.w14" crc="f48a42c5"/><part name="90015-09.w13" crc="55f49315"/><part name="90015-10.w15" crc="678be0cb"/><part repeat="1048576">00</part><part name="90015-34.w32" crc="2ca9b062"/><part name="90015-33.w31" crc="6121d247"/>
+    </rom>
+    <switches default="FF,FD,FF,FF" base="0"><dip name="Coin A (EU FR)" bits="0,1,2" ids="2C/3C,1C/7C,1C/6C,1C/5C,1C/4C,1C/3C,1C/2C,1C/1C"/><dip name="Coin B (EU FR)" bits="3,4,5" ids="5C/1C,4C/1C,3C/1C,2C/1C,1C/4C,1C/3C,1C/2C,1C/1C"/><dip name="Free Play (EU &amp; FR)" bits="6" ids="On,Off"/><dip name="Region" bits="8,9" ids="France,Europe,USA,Japan"/><dip name="Difficulty" bits="10,11" ids="Easy,Very Hard,Hard,Normal"/><dip name="Infinite Time (Cheat)" bits="12" ids="On,Off"/><dip name="Demo Sounds" bits="13" ids="Off,On"/><dip name="Choose Race (US EU FR)" bits="14" ids="Off,On"/><dip name="Vibrations" bits="15" ids="Shake,Torque"/><dip name="This Unit Is" bits="16" ids="Master,Slave"/><dip name="Unit ID" bits="17,18" ids="3 (Blue Car),2 (Blue-White Car),1 (Red Car),0 (Red-White Car)"/></switches>
+
+    <buttons names="Brake,Gear Shift,Accelerator,-,-,-,-,-,Start,Coin,Pause,Service"
+             default="A,B,X,Y,Start,Select,L,R" count="4"/>
+</misterromdescription>

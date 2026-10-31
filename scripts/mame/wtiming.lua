@@ -52,6 +52,7 @@ local vb_votes = {}
 local names, hist, lastl = {}, {}, {}
 local counting = false
 local frame_last = {}
+local tap_error
 _G.__wt_taps = {}
 for _, spec in ipairs(split(TAPS, ",")) do
     local f = split(spec, ":")
@@ -60,10 +61,15 @@ for _, spec in ipairs(split(TAPS, ",")) do
     hist[name] = {}
     lastl[name] = {}
     local tap = prog:install_write_tap(lo, hi, "wt_" .. name, function(offset, data, mask)
-        if counting then
-            local l = cur_line()
-            hist[name][l] = (hist[name][l] or 0) + 1
-            frame_last[name] = l
+        local ok, err = pcall(function()
+            if counting then
+                local l = cur_line()
+                hist[name][l] = (hist[name][l] or 0) + 1
+                frame_last[name] = l
+            end
+        end)
+        if not ok and not tap_error then
+            tap_error = tostring(err)
         end
         return data
     end)
@@ -81,7 +87,8 @@ local f_coin, f_start = field(os.getenv("WT_IN_COIN") or "Coin 1"), field(os.get
 local f_right, f_b1 = field(os.getenv("WT_IN_HOLD") or "P1 Right"), field(os.getenv("WT_IN_PULSE") or "P1 Button 1")
 
 local n = 0
-emu.register_frame_done(function()
+_G.__wt_frame = function()
+    if tap_error then error("write tap failed: " .. tap_error) end
     n = n + 1
     if COIN > 0 and f_coin and f_start then
         f_coin:set_value((n >= COIN and n < COIN + 6) and 1 or 0)
@@ -124,4 +131,15 @@ emu.register_frame_done(function()
         f:close()
         mach:exit()
     end
-end)
+end
+_G.__wt_frame_guard = function()
+    local ok, err = pcall(_G.__wt_frame)
+    if not ok then
+        local root = os.getenv("CORE_OUT") or "."
+        local f = io.open(root .. "/lua_error.txt", "w")
+        if f then f:write("frame: " .. tostring(err) .. "\n"); f:close() end
+        print("LUAFAIL frame: " .. tostring(err))
+        mach:exit()
+    end
+end
+emu.register_frame_done(_G.__wt_frame_guard)

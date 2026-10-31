@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<misterromdescription>
+    <name>Cisco Heat</name>
+    <setname>cischeat</setname>
+    <rbf>Cischeat</rbf>
+    <mameversion>0289</mameversion>
+    <year>1990</year>
+    <manufacturer>Jaleco</manufacturer>
+    <category>Arcade</category>
+    <rotation>horizontal</rotation>
+    <players>1</players>
+    <rom index="1"><part>01</part></rom>
+    <rom index="0" zip="cischeat.zip" md5="none" address="0x30000000">
+        <!-- Raw sound program is bitswapped at load; sprite graphics are untangled at load. -->
+        <interleave output="16"><part name="ch9071v2.03" crc="dd1bb26f" map="01"/><part name="ch9071v2.01" crc="7b65276a" map="10"/></interleave><interleave output="16"><part name="ch9071.04" crc="7fb48cbc" map="01"/><part name="ch9071.02" crc="a5d0f4dc" map="10"/></interleave><interleave output="16"><part name="ch9073.01" crc="ba331526" map="01"/><part name="ch9073.02" crc="b45ff10f" map="10"/></interleave><interleave output="16"><part name="ch9073v1.03" crc="bf1d1cbf" map="01"/><part name="ch9073v1.04" crc="1ec8a597" map="10"/></interleave><part repeat="524288">00</part><interleave output="16"><part name="ch9071.11" crc="bc137bea" map="01"/><part name="ch9071.10" crc="bf7b634d" map="10"/></interleave><part name="ch9071.a14" crc="7a6d147f"/><part repeat="262144">00</part><part name="ch9071.t74" crc="735a2e25"/><part repeat="262144">00</part><part name="ch9071.07" crc="3724ccc3"/><part repeat="65536">00</part><part repeat="131072">00</part><interleave output="16"><part name="ch9072.r15" crc="38af4aea" map="01"/><part name="ch9072.r16" crc="71388dad" map="10"/></interleave><interleave output="16"><part name="ch9072.r17" crc="9d052cf3" map="01"/><part name="ch9072.r18" crc="fe402a56" map="10"/></interleave><interleave output="16"><part name="ch9072.r25" crc="be8cca47" map="01"/><part name="ch9072.r26" crc="2f96f47b" map="10"/></interleave><interleave output="16"><part name="ch9072.r19" crc="4e996fa8" map="01"/><part name="ch9072.r20" crc="fa70b92d" map="10"/></interleave><part repeat="2097152">00</part><part name="ch9073.r21" crc="2943d2f6"/><part name="ch9073.r22" crc="2dd44f85"/><part repeat="1048576">00</part><part repeat="2097152">00</part><part name="ch9071.r23" crc="c7dbb992"/><part name="ch9071.r24" crc="e87ca4d7"/>
+    </rom>
+    <switches default="FF,FF,FF,FF" base="0"><dip name="Coin A" bits="0,1,2" ids="Free Play,4C/1C,3C/1C,2C/1C,1C/4C,1C/3C,1C/2C,1C/1C"/><dip name="Coin B" bits="3,4,5" ids="Free Play,4C/1C,3C/1C,2C/1C,1C/4C,1C/3C,1C/2C,1C/1C"/><dip name="Unit ID" bits="8,9" ids="3 (Green Car),2 (Yellow Car),1 (Blue Car),0 (Red Car)"/><dip name="Difficulty" bits="10,11" ids="Easy,Hardest,Hard,Normal"/><dip name="Infinite Time (Cheat)" bits="12" ids="On,Off"/><dip name="Demo Sounds" bits="13" ids="Off,On"/><dip name="Country" bits="14" ids="USA,Japan"/><dip name="Allow Continue" bits="15" ids="On,Off"/><dip name="Unit ID (2)" bits="17,18" ids="0 (Red Car),1 (Blue Car),2 (Yellow Car),Use other"/></switches>
+
+    <buttons names="Brake,Gear Shift,Accelerator,Horn,-,-,-,-,Start,Coin,Pause,Service"
+             default="A,B,X,Y,Start,Select,L,R" count="4"/>
+</misterromdescription>

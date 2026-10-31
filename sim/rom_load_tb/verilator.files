@@ -1,0 +1,13 @@
+// fast ROM load: DDR3 model -> loader and transforms -> SDRAM stack -> chip model
+--no-assert-case
+-Wno-fatal
+rtl/memory/ddram_phy.sv
+rtl/memory/rom_loader.sv
+rtl/memory/cischeat_rom_transform.sv
+rtl/memory/cischeat_rom_load.sv
+rtl/memory/sdram/sdram.sv
+rtl/memory/sdram_phy.sv
+rtl/memory/sdram_arbiter.sv
+rtl/memory/cischeat_sdram.sv
+sim/common/sdram_chip_model_wide.sv
+sim/rom_load_tb/tb_rom_load.sv

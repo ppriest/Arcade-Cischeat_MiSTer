@@ -1,2 +1,21 @@
 scripts/hooks/* text eol=lf
 *.sh text eol=lf
+
+# Vendored third-party RTL: byte-exact copies, never normalised. Each directory
+# has a PROVENANCE.md. Re-vendor; do not edit in place.
+rtl/cpu/fx68k/** -text
+rtl/sound/jt51/** -text
+rtl/sound/jt6295/** -text
+rtl/hiscore/** -text
+rtl/jtframe/** -text
+
+rtl/memory/sdram/*.sv -text
+rtl/memory/sdram_phy.sv -text
+rtl/memory/sdram_arbiter.sv -text
+rtl/memory/sdram_download.sv -text
+rtl/memory/sdram_narrow_bridge.sv -text
+rtl/memory/rom_loader.sv -text
+rtl/memory/ddram_phy.sv -text
+
+rtl/video/crt_adjust.sv -text
+rtl/video/screen_rotate_two.sv -text

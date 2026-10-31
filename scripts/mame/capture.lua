@@ -8,7 +8,9 @@
 --   CORE_BYTES   bus width in bytes (1, 2, 4, 8)
 --   CORE_BIG     1 if the bus is big-endian
 --   CORE_READ    "name:hexlo:hexhi,..."  RAM readable through the CPU's view
+--   CORE_READ_EXTRA "name:cpu:space:hexlo:hexhi,..." RAM in other CPU spaces
 --   CORE_WTAP    "name:hexlo:hexhi,..."  write-only registers, rebuilt from writes
+--   CORE_COIN    frame to insert a coin, then start and drive
 --
 -- Readable RAM is read through the CPU's address space: that is what the CPU
 -- would read, handlers and umask included, which is what the RTL must match.
@@ -22,6 +24,7 @@
 
 local OUT   = os.getenv("CORE_OUT") or "capture"
 local FRAME = tonumber(os.getenv("CORE_FRAME") or "1200")
+local COIN  = tonumber(os.getenv("CORE_COIN") or "0")
 local BYTES = tonumber(os.getenv("CORE_BYTES") or "2")
 local BIG   = os.getenv("CORE_BIG") ~= "0"
 local m     = manager.machine
@@ -61,6 +64,17 @@ local function ranges(s)
     return out
 end
 
+local function extra_ranges(s)
+    local out = {}
+    for spec in string.gmatch(s or "", "([^,]+)") do
+        local name, cpu, space, lo, hi = spec:match("^([^:]+):([^:]+):([^:]+):(%x+):(%x+)$")
+        assert(name, "bad extra read range: " .. spec)
+        out[#out + 1] = { name = name, cpu = cpu, space = space,
+                          lo = tonumber(lo, 16), hi = tonumber(hi, 16) }
+    end
+    return out
+end
+
 -- Global on purpose: an autoboot chunk's locals are collected once the chunk
 -- returns, and taps and notifiers held only by a local stop firing silently.
 core_subs = {}
@@ -87,9 +101,9 @@ for _, r in ipairs(WTAP) do
         end))
 end
 
-local function read_block(lo, hi)
+local function read_block(space, lo, hi)
     local t = {}
-    for a = lo, hi do t[#t + 1] = string.char(sp:read_u8(a)) end
+    for a = lo, hi do t[#t + 1] = string.char(space:read_u8(a)) end
     return table.concat(t)
 end
 
@@ -100,14 +114,41 @@ local function dump_sparse(name, tbl, size)
 end
 
 local done = false
+local function field(name)
+    for _, port in pairs(m.ioport.ports) do
+        local f = port.fields[name]
+        if f then return f end
+    end
+end
+local coin, start, hold, pulse
+if COIN > 0 then
+    coin = field(os.getenv("CORE_IN_COIN") or "Coin 1")
+    start = field(os.getenv("CORE_IN_START") or "1 Player Start")
+    hold = field(os.getenv("CORE_IN_HOLD") or "P1 Right")
+    pulse = field(os.getenv("CORE_IN_PULSE") or "P1 Button 1")
+end
 core_subs[#core_subs + 1] = emu.add_machine_frame_notifier(guard("frame", function()
     if done then return end
     local scr = m.screens[":screen"]
+    local n = scr:frame_number()
+    if COIN > 0 and coin and start then
+        coin:set_value((n >= COIN and n < COIN + 6) and 1 or 0)
+        start:set_value((n >= COIN + 90 and n < COIN + 96) and 1 or 0)
+        if n >= COIN + 96 then
+            if hold then hold:set_value(1) end
+            if pulse then pulse:set_value((n % 20) < 4 and 1 or 0) end
+        end
+    end
     if scr:frame_number() < FRAME then return end
     done = true
 
     for _, r in ipairs(ranges(os.getenv("CORE_READ"))) do
-        wr(r.name .. ".bin", read_block(r.lo, r.hi))
+        wr(r.name .. ".bin", read_block(sp, r.lo, r.hi))
+    end
+    for _, r in ipairs(extra_ranges(os.getenv("CORE_READ_EXTRA"))) do
+        local cpu = assert(m.devices[":" .. r.cpu], "missing capture CPU: " .. r.cpu)
+        local space = assert(cpu.spaces[r.space], "missing capture space: " .. r.space)
+        wr(r.name .. ".bin", read_block(space, r.lo, r.hi))
     end
     for _, r in ipairs(WTAP) do
         dump_sparse("reg_" .. r.name .. ".bin", regs[r.name], r.hi - r.lo + 1)

@@ -1,50 +1,82 @@
 {
-  "_comment": "Core-specific. The main CPU's view of the machine, from the MAME driver's address map. Read by mame_capture.py and write_timing.py. Addresses are hex strings, inclusive.",
+  "_comment": "Cischeat main CPU's view of the machine, from jaleco/cischeat.cpp. Addresses are hex strings, inclusive.",
   "cpu": ":maincpu",
   "space": "program",
   "bus_bytes": 2,
   "big_endian": true,
   "read": {
     "workram": [
-      "0x000000",
-      "0x00ffff"
+      "0x0f0000",
+      "0x0fffff"
+    ],
+    "sprites": [
+      "0x0f8000",
+      "0x0f8fff"
+    ],
+    "scroll0": [
+      "0x0a0000",
+      "0x0a7fff"
+    ],
+    "scroll1": [
+      "0x0a8000",
+      "0x0affff"
+    ],
+    "scroll2": [
+      "0x0b0000",
+      "0x0b7fff"
+    ],
+    "palette": [
+      "0x0b8000",
+      "0x0bffff"
     ]
+  },
+  "read_extra": {
+    "road0": {"cpu": "road1cpu", "space": "program", "range": ["0x080000", "0x0807ff"]},
+    "road1": {"cpu": "road2cpu", "space": "program", "range": ["0x080000", "0x0807ff"]}
   },
   "wtap": {
-    "vregs": [
-      "0x000000",
-      "0x00001f"
+    "video_regs": [
+      "0x080000",
+      "0x087fff"
+    ],
+    "scroll_regs": [
+      "0x082000",
+      "0x082109"
     ]
   },
-  "sweep": [
-    "workram",
-    "vregs"
-  ],
+  "sweep": ["sprites", "scroll0", "scroll1", "scroll2", "video_regs", "scroll_regs"],
   "trace": {
     "addr_hi": "0xffffff",
     "io": [
-      "0x000000",
-      "0x000000"
+      "0x080000",
+      "0x0824ff"
     ],
     "vectors": [
       "0x000000",
-      "0x000000"
+      "0x000007"
     ],
-    "ipl": {
-      "reg": "SR",
-      "shift": 8,
-      "mask": 7
-    },
     "rom": [
       [
         "0x000000",
-        "0x0fffff"
+        "0x07ffff"
+      ],
+      [
+        "0x100000",
+        "0x17ffff"
       ]
     ],
     "ram": [
       [
-        "0x100000",
-        "0x10ffff"
+        "0x084000",
+        "0x08ffff"
+      ],
+      [
+        "0x090000",
+        "0x0bffff"
+      ],
+      [
+        "0x0f0000",
+        "0x0fffff"
       ]
     ]
   },

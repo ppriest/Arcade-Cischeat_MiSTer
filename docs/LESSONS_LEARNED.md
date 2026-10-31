@@ -3,7 +3,7 @@
 Cumulative across five MiSTer arcade cores (Psikyo, Fuuki, Seta, Jaleco MegaSystem 32, Konami System
 GX) built on the same toolchain (Quartus 17.0, ModelSim, Verilator), board (DE10-nano) and framework
 (`sys/`, `hps_io`, Sorgelig's `sdram.sv`). Unmarked entries were established on Psikyo; `[Fuuki]`,
-`[Seta]`, `[MS32]`, `[GX]`, `[HyperNG64]` mark the others.
+`[Seta]`, `[MS32]`, `[GX]`, `[HyperNG64]`, `[Cischeat]` mark the others.
 To append: add the entry under the matching section, marked `[CoreName]`, in the same shape -- the
 rule as the heading, the mechanism that made the wrong assumption plausible, the evidence that
 settled it. Never edit an earlier core's entry to say what a later core found.
@@ -458,6 +458,15 @@ caught: the row/column split needed swapping (a burst auto-increments the *colum
 upstream had it the other way, harmless until bursting exists); the model ignoring `DQML`/`DQMH`; an
 off-by-one in burst-read CAS timing.
 
+### [Cischeat] Measure the controller's clocks per granule before writing a line budget
+
+The roadmap budgeted 768 granules a line at 48 MHz from the burst arithmetic, one granule per 4
+clocks. The vendored `sdram.sv` opens a row, bursts and auto-precharges with no bank overlap: 11
+of its clocks a granule, 15.3 with the phy and arbiter handshakes, 200 a line. The board asked for
+293 in play and the SDRAM went to 96 MHz. A bench of the real stack on a command-decoding chip
+model with every client always asking gives the number in seconds (`sim/sdram_tb`); run it before
+the budget, not after the RTL.
+
 ### Size a prefetch buffer for correlated consumers, not average bandwidth
 
 Two layers with identical scanline timing request in lockstep; a 2-entry ping-pong absorbed one
@@ -832,6 +841,14 @@ pair before the RTL around it.
   Write the bench arguments (coin schedule, DIPs, start presses) into the capture's manifest and make
   the comparison script refuse a mismatch.
 
+- **[Cischeat] A savestate round trip from a boot-time state proves nothing about RAM.** Save A,
+  save B a frame later, load A, save C: B and C matched in all 18 sections and the main CPU's trace
+  after the load matched the original over 7,161 accesses, while the load wrote no RAM at all. A
+  frame after reset the game had barely touched RAM, so the RAM left over from B was what A said
+  anyway. Loading a MAME capture taken mid-race showed it at once: black frames, the CPU popping
+  zero off its stack. Start the round trip from a state whose RAM differs from the running one,
+  and spot-check a few loaded words against the file.
+
 ## Timing closure
 
 - **[BallySente] Ask the timing analyser which path fails; do not reason about it.** A filter
@@ -1022,6 +1039,14 @@ target is the reset entry. Not proven that the extra IRQ caused the restart -- a
 instruction lowering the mask to 0. Dump the vector table before deciding a board's interrupts; an
 ack address that is also an input port must acknowledge on writes only.
 
+- **[Cischeat] A one-line instruction cache thrashes on any loop that crosses a line boundary.**
+  The boot ROM checksum at 0x2118-0x2123 straddles two 16-byte lines; with one line per CPU every
+  iteration refilled both, 16 word reads, and the main CPU spent 46% of each frame held. The CPU
+  trace still matched MAME's access for access, because the loop count, not the time, decides
+  the order; only frames from reset showed it, the bench 41 frames behind MAME's boot screens.
+  Four direct-mapped lines brought it to within 8. Check frames against MAME as well as the trace:
+  the trace cannot see time.
+
 ## Quartus synthesis gotchas (not visible in ModelSim)
 
 - **Non-blocking assignments to block-local (`automatic`) variables are rejected**, even with
@@ -1069,6 +1094,22 @@ ack address that is also an input port must acknowledge on writes only.
 - **[GX] Quartus 17 rejects `for (genvar i = ...)`** (`Error (10170)`); declare `genvar i;` before
   the `generate`.
 - **`quartus_map` alone is a fast pre-check** for whether a change elaborates.
+- **[Cischeat] A memory nothing ever writes is a constant, and synthesis prunes what it feeds.** A
+  five-CPU fit harness put each FX68K behind a 2K x 16 instruction ROM with a registered read and
+  no write port. Quartus inferred no RAM blocks for it and reported 5,328 ALMs for five CPUs where
+  the same CPUs alone measured 10,326 - half of each CPU pruned, silently, because the instruction
+  stream was the constant zero. The tell was the block count: 30, exactly the microcode's 6 per
+  CPU, when five 2K x 16 arrays should have added 20 more. Give the memory a write port (a loader,
+  an SDRAM model) or initialise it from a file, and re-fit; the datapath comes back.
+
+- **[Cischeat] A RAM written from both ports infers only in the `no_rw_check` two-port form.** A
+  line buffer with an engine write on port A and a read-then-clear on port B, written as a
+  write-only port A and a read/write port B, was built from registers without a word: three
+  sprite-group buffers became 12,992 ALMs where 6 M10K belonged, and the fit still closed.
+  Quartus's new-data template stopped with `Error (276001)` instead. jtframe_dual_ram's form
+  infers: `(* ramstyle = "no_rw_check" *)`, and on each port `q <= mem[addr]; if (we)
+  mem[addr] <= d;`. The tell was the per-entity ALM column, not the totals: a RAM module with
+  thousands of ALMs and no M10K.
 
 ## Debug instrumentation: how not to fool yourself
 
@@ -1204,6 +1245,25 @@ ack address that is also an input port must acknowledge on writes only.
   memory dumped as it is on x86. A bench loading it big-endian ran identically to MAME for 700
   frames until the game's first settings read.
 
+- **[Cischeat] MAME's 68000 `PC` is the prefetch address; a register capture wants `CURPC`.**
+  The cycle-level 68000 core stops mid-instruction between timeslices. Its `PC` state entry is
+  `m_pc`, already past the opcode, so restoring it ran a `BEQ.W` displacement word as an opcode and
+  the CPU fell into its illegal-instruction handler. `CURPC` (`m_ipc`) is the start of the
+  instruction in progress; restoring there repeats any part of it already done.
+
+- **[Cischeat] `VIDEO_UPDATE_AFTER_VBLANK` moves the frame notifier to vblank end.** Check the
+  driver's screen config before treating a frame notifier, or `wtiming.lua`'s "vblank start", as
+  vblank start. Cisco Heat sets the flag with a 2,500 us vblank, so the notifier, MAME's draw and
+  its read of the sprite list are at scanline 14, and the write-timing sweep's "in vblank" column
+  covered 242 lines. A latch row chosen from that column, and a state captured at the notifier,
+  were both off by the length of vblank. `emu.wait(screen:time_until_pos(n))` in a coroutine
+  reaches any scanline.
+
+- **[Cischeat] `screen:snapshot()` includes the layout's artwork unless MAME runs with
+  `-snapview native`.** Cisco Heat's `cischeat.lh` draws a gear-shift graphic over the screen's
+  bottom-right corner: 377 shaded pixels, in every frame from power-on, that no palette entry
+  produces. A bench compared against such snapshots never matches exactly.
+
 ## Hardware bring-up (MiSTer / DE10-nano)
 
 - **The SDRAM pinout has an authoritative in-repo reference.** The `.qsf` does `source sys/sys.tcl`;
@@ -1244,6 +1304,11 @@ ack address that is also an input port must acknowledge on writes only.
 
 ## Tooling and workflow (Quartus, ModelSim, Verilator, and the shell around them)
 
+- **[Cischeat] ModelSim's `vlog.exe` can exit 127 without printing anything, and under `set -e`
+  the bench then "prints nothing".** Four bench runs ended that way, each while
+  another Quartus compile was running; six bare `vlog -version` starts did not; the earlier
+  report of it was a Windows DLL relocation error. `scripts/run_sim.sh` now retries on 127 and
+  says so; the first run with the retry needed three attempts.
 - **Working directory does not reliably persist into backgrounded commands.** `cd <project> &&
   <tool>` in one line, or put the `cd` in the Tcl. Symptoms: `Error (23018): Tcl Script File ... not
   found`, `Error (12007): Top-level design entity ... is undefined`.
@@ -1307,3 +1372,10 @@ ack address that is also an input port must acknowledge on writes only.
   with "Resource not accessible by personal access token (cloneTemplateRepository)" even with
   Administration write; the GraphQL mutation behind it is refused. The REST endpoint
   `POST repos/<owner>/<template>/generate` works with the same token. `new_core.py` uses it.
+
+- **[Cischeat] ModelSim does not re-evaluate a function's reads of module signals in a port
+  expression.** `.a_we(wen(0, m_work) | ewen(5))`, with `ewen` returning `e_wr && op_sec == sec`,
+  stayed 0 for the whole load: the call's only argument is a constant, and ModelSim evaluates the
+  expression when an argument changes, not when the signals the function reads do. The state
+  engine's RAM writes never happened in simulation; synthesis would have built them. Compute such
+  enables as signals (`e_sel = e_wr ? 1 << op_sec : 0`) and index them.

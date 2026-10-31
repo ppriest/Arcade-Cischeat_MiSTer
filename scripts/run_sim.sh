@@ -79,6 +79,9 @@ fi
 #                           it, ModelSim's vlog does not (vlog-2730), and it
 #                           must stay UNTOUCHED -- so it is left out of
 #                           simulation rather than patched. Still synthesized.
+#   rtl/hiscore/*.v         same class: `ram_addr` is used before its
+#                           declaration (vlog-2730/2388). Quartus accepts it;
+#                           hiscore is not needed by any bench.
 #   *_upstream_reference.*  pristine upstream copies kept beside the vendored
 #                           modules purely so local changes can be diffed.
 #   cos.sv, lfsr.v, mycore.v  Template_MiSTer's demo core. Excluded now, and to
@@ -92,6 +95,7 @@ RTL=$(find rtl -name '*.sv' \
         -not -name 'cos.sv' | sort)
 VLOG=$(find rtl -name '*.v' \
         -not -path 'rtl/synth_check/*' \
+        -not -path 'rtl/hiscore/*' \
         -not -name 'pll*.v' \
         -not -name 'lfsr.v' -not -name 'mycore.v' \
         -not -name '*_upstream_reference.v' | sort)
@@ -110,10 +114,22 @@ echo "--- vlog: RTL + testbench ---"
 #
 # -suppress 7061: some vendored cores (fx68k) drive parts of an array from more than one
 # always_ff. Quartus accepts it; ModelSim refuses by default.
-# shellcheck disable=SC2086
-"$MS/vlog.exe" -quiet -sv -work work -suppress 7061 \
-    +define+SIMULATION ${INITREG-+initreg=r+0 +initmem=r+0} ${VDEFS:-} \
-    $VLOG $RTL $(ls sim/common/*.sv 2>/dev/null) "sim/$TB"/*.sv
+#
+# vlog.exe sometimes exits 127 without a word: the process did not start
+# (docs/PHASE2.md recorded a Windows DLL relocation error from it). Under
+# set -e that ended the run silently, which reads like a bench that printed
+# nothing. Retry it, and say so.
+for _try in 1 2 3; do
+  _rc=0
+  # shellcheck disable=SC2086
+  "$MS/vlog.exe" -quiet -sv -work work -suppress 7061 \
+      +define+SIMULATION ${INITREG-+initreg=r+0 +initmem=r+0} ${VDEFS:-} \
+      $VLOG $RTL $(ls sim/common/*.sv 2>/dev/null) "sim/$TB"/*.sv || _rc=$?
+  [ "$_rc" != 127 ] && break
+  echo "vlog.exe did not start (exit 127), attempt $_try of 3"
+  rm -rf work; "$MS/vlib.exe" work >/dev/null
+done
+[ "$_rc" = 0 ] || { echo "vlog failed (exit $_rc)"; exit "$_rc"; }
 
 # The bench's top module is found rather than derived from the directory name,
 # so a bench directory can hold more than one file without the runner caring.

@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<misterromdescription>
+    <name>Big Run (11th Rallye version, US?)</name>
+    <setname>bigrunu</setname>
+    <rbf>Cischeat</rbf>
+    <mameversion>0289</mameversion>
+    <year>1989</year>
+    <manufacturer>Jaleco</manufacturer>
+    <category>Arcade</category>
+    <rotation>horizontal</rotation>
+    <players>1</players>
+    <rom index="1"><part>00</part></rom>
+    <rom index="0" zip="bigrunu.zip|bigrun.zip" md5="none" address="0x30000000">
+        <!-- Raw sound program is bitswapped at load; sprite graphics are untangled at load. -->
+        <interleave output="16"><part name="br8950b.1" crc="748d1525" map="01"/><part name="br8950b.2" crc="4164a542" map="10"/></interleave><interleave output="16"><part name="br8950b.3" crc="864cebf7" map="01"/><part name="br8950b.4" crc="702c2a6e" map="10"/></interleave><part repeat="262144">00</part><interleave output="16"><part name="br8952a.19" crc="fcf6b70c" map="01"/><part name="br8952a.20" crc="c43d367b" map="10"/></interleave><part repeat="262144">00</part><interleave output="16"><part name="br8952a.9" crc="f803f0d9" map="01"/><part name="br8952a.10" crc="8c0df287" map="10"/></interleave><part repeat="262144">00</part><part repeat="524288">00</part><interleave output="16"><part name="br8953c.2" crc="b690d8d9" map="01"/><part name="br8953c.1" crc="79fc7bc0" map="10"/></interleave><part name="br8950b.5" crc="0530764e"/><part name="br8950b.6" crc="cf40ecfa"/><part repeat="262144">00</part><part name="br8950b.7" crc="bd5fd061"/><part name="br8950b.8" crc="7d66f418"/><part repeat="262144">00</part><part name="br8950b.9" crc="be0864c4"/><part repeat="131072">00</part><interleave output="16"><part name="mr88004a.t41" crc="c781d8c5" map="01"/><part name="mr88004d.t43" crc="e4041208" map="10"/></interleave><interleave output="16"><part name="mr88004b.t42" crc="2df2e7b9" map="01"/><part name="mr88004e.t44" crc="7af7fbf6" map="10"/></interleave><interleave output="16"><part name="mb88004c.t48" crc="02e2931d" map="01"/><part name="mb88004f.t49" crc="4f012dab" map="10"/></interleave><part repeat="3670016">00</part><part name="mr88004g.t45" crc="bb397bae"/><part name="mb88004h.t46" crc="6b31a1ba"/><part repeat="1048576">00</part><part repeat="2097152">00</part><part name="mb88004l.t50" crc="6b11fb10" offset="0x0" length="0x20000"/><part name="mb88004l.t50" crc="6b11fb10" offset="0x40000" length="0x20000"/><part name="mb88004l.t50" crc="6b11fb10" offset="0x20000" length="0x20000"/><part name="mb88004l.t50" crc="6b11fb10" offset="0x60000" length="0x20000"/><part name="mb88004m.t51" crc="ee52f04d" offset="0x0" length="0x20000"/><part name="mb88004m.t51" crc="ee52f04d" offset="0x40000" length="0x20000"/><part name="mb88004m.t51" crc="ee52f04d" offset="0x20000" length="0x20000"/><part name="mb88004m.t51" crc="ee52f04d" offset="0x60000" length="0x20000"/>
+    </rom>
+    <switches default="FF,FF,F0,FF" base="0"><dip name="Coin B Extra" bits="0,1" ids="1C/7C,1C/5C,1C/6C,Unused"/><dip name="Allow Continue" bits="2" ids="Yes,No"/><dip name="Region" bits="3" ids="English,Japanese"/><dip name="Move Cabinet" bits="4" ids="No,Yes"/><dip name="Difficulty" bits="5,6" ids="Easy,Hard,Hardest,Normal"/><dip name="Auto Start" bits="7" ids="No,After 15s"/><dip name="Invulnerability" bits="8" ids="On,Off"/><dip name="Demo Sounds" bits="9" ids="Off,On"/><dip name="Coin B" bits="10,11,12" ids="Free Play,1C/4C,3C/1C,1C/2C,4C/1C,1C/3C,2C/1C,1C/1C"/><dip name="Coin A" bits="13,14,15" ids="Free Play,1C/4C,3C/1C,1C/2C,4C/1C,1C/3C,2C/1C,1C/1C"/><dip name="Link ID" bits="16" ids="Master Unit,Other Units"/><dip name="Unit ID" bits="17,18" ids="1 (Blue-White Car),2 (Green-White Car),3 (Red-White Car),4 (Yellow Car)"/></switches>
+
+    <buttons names="Brake,Gear Shift,Accelerator,Horn,-,-,-,-,Start,Coin,Pause,Service"
+             default="A,B,X,Y,Start,Select,L,R" count="4"/>
+</misterromdescription>

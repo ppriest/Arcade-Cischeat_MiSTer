@@ -7,8 +7,17 @@ module  pll_0002(
 	// interface 'reset'
 	input wire rst,
 
-	// interface 'outclk0'
+	// From Arcade-Seta_MiSTer, where outclk_0 is clk_sys. Here it is clk_mem,
+	// the SDRAM controller's 96 MHz; outclk_2 is clk_sys, 48 MHz, half of it,
+	// so the two are synchronous with every 48 MHz edge on a 96 MHz edge.
 	output wire outclk_0,
+
+	// SDRAM_CLK: outclk_0 shifted 180 degrees (5208 ps), the value Psikyo
+	// proved on hardware with this controller and Seta carried at 96 MHz. A
+	// chip model has no clock phase, so no simulation checks it.
+	output wire outclk_1,
+
+	output wire outclk_2,
 
 	// interface 'locked'
 	output wire locked
@@ -18,14 +27,14 @@ module  pll_0002(
 		.fractional_vco_multiplier("false"),
 		.reference_clock_frequency("50.0 MHz"),
 		.operation_mode("direct"),
-		.number_of_clocks(1),
-		.output_clock_frequency0("20.000000 MHz"),
+		.number_of_clocks(3),
+		.output_clock_frequency0("96.000000 MHz"),
 		.phase_shift0("0 ps"),
 		.duty_cycle0(50),
-		.output_clock_frequency1("0 MHz"),
-		.phase_shift1("0 ps"),
+		.output_clock_frequency1("96.000000 MHz"),
+		.phase_shift1("5208 ps"),
 		.duty_cycle1(50),
-		.output_clock_frequency2("0 MHz"),
+		.output_clock_frequency2("48.000000 MHz"),
 		.phase_shift2("0 ps"),
 		.duty_cycle2(50),
 		.output_clock_frequency3("0 MHz"),
@@ -77,7 +86,14 @@ module  pll_0002(
 		.pll_subtype("General")
 	) altera_pll_i (
 		.rst	(rst),
-		.outclk	({outclk_0}),
+		// THE BUS, NOT JUST THE PARAMETERS. number_of_clocks(3) and
+		// output_clock_frequency2 are not enough on their own: this
+		// concatenation is the actual wiring, and leaving it two wide left
+		// outclk_2 dangling. clk_video was then undriven, every register in
+		// arcade_video went "Stuck at GND due to stuck port clock", and the
+		// whole video chain was optimised away -- 4,000 ALMs, 35 RAM blocks
+		// and 9 DSPs lighter, reporting +0.238 ns and TIMING MET.
+		.outclk	({outclk_2, outclk_1, outclk_0}),
 		.locked	(locked),
 		.fboutclk	( ),
 		.fbclk	(1'b0),

@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<misterromdescription>
+    <name>Wild Pilot</name>
+    <setname>wildplt</setname>
+    <rbf>Cischeat</rbf>
+    <mameversion>0289</mameversion>
+    <year>1992</year>
+    <manufacturer>Jaleco</manufacturer>
+    <category>Arcade</category>
+    <rotation>horizontal</rotation>
+    <players>2</players>
+    <rom index="1"><part>04</part></rom>
+    <rom index="0" zip="wildplt.zip" md5="none" address="0x30000000">
+        <!-- Raw sound program is bitswapped at load; sprite graphics are untangled at load. -->
+        <interleave output="16"><part name="gp-9188a_27_ver1-4.bin" crc="4754f023" map="01"/><part name="gp-9188a_22_ver1-4.bin" crc="9e099111" map="10"/></interleave><interleave output="16"><part name="gp-9188a_26_ver1-0.bin" crc="bc48db69" map="01"/><part name="gp-9188a_21_ver1-0.bin" crc="c3192fbe" map="10"/></interleave><interleave output="16"><part name="gp-9188a_16_ver1-0.bin" crc="75e48920" map="01"/><part name="gp-9188a_11_ver1-0.bin" crc="8174e65b" map="10"/></interleave><part repeat="262144">00</part><interleave output="16"><part name="gp-9188a_06_ver1-0.bin" crc="99139696" map="01"/><part name="gp-9188a_01_ver1-0.bin" crc="2c3d7ec4" map="10"/></interleave><part repeat="262144">00</part><interleave output="16"><part name="wp-92116_5_ver1-0.bin" crc="8952e07c" map="01"/><part name="wp-92116_6_ver1-0.bin" crc="2c8108c2" map="10"/></interleave><part repeat="262144">00</part><interleave output="16"><part name="wp-92116_3_ver1-1.bin" crc="51dd594b" map="01"/><part name="wp-92116_4_ver1-1.bin" crc="9ba3cb7b" map="10"/></interleave><part name="gp-9188a_25_ver1-0.bin" crc="e69d3ccc"/><part name="gp-9188a_28_ver1-0.bin" crc="2166c803"/><part name="gp-9188a_30_ver1-0.bin" crc="35478ed9"/><part repeat="131072">00</part><interleave output="16"><part name="mr92020-11_w65.bin" crc="585448cb" map="01"/><part name="mr92020-12_w66.bin" crc="07104f78" map="10"/></interleave><interleave output="16"><part name="mr92020-13_w67.bin" crc="c4afa3dc" map="01"/><part name="mr92020-14_w68.bin" crc="c8676eca" map="10"/></interleave><interleave output="16"><part name="mr92020-15_w69.bin" crc="cc24a3d7" map="01"/><part name="mr92020-16_w70.bin" crc="6f4c9d4e" map="10"/></interleave><interleave output="16"><part name="gp-9189_7_ver1-0.bin" crc="1ea6a85d" map="01"/><part name="gp-9189_8_ver1-0.bin" crc="d9822da0" map="10"/></interleave><interleave output="16"><part name="gp-9189_9_ver1-0.bin" crc="0d4f6b5e" map="01"/><part name="gp-9189_10_ver1-0.bin" crc="9240969c" map="10"/></interleave><part repeat="1048576">00</part><part name="mr92020-08_c50.bin" crc="5e840567"/><part name="mr92020-07_c49.bin" crc="48d8ecb2"/><part name="mr92020-06_c51.bin" crc="c00f1245"/><part name="mr92020-05_c48.bin" crc="74ef3306"/><part name="mr92020-04_c47.bin" crc="c752f467"/><part name="mr92020-03_c52.bin" crc="985b5fe0"/><part name="mr92020-02_c53.bin" crc="da961dd4"/><part name="mr92020-01_c46.bin" crc="f908c6e0"/><part name="wp-92116_2_ver1-0.bin" crc="95237bd0"/><part name="wp-92116_1_ver1-0.bin" crc="559bafc3"/>
+    </rom>
+    <switches default="FF,FF" base="0"><dip name="Coinage" bits="0,1,2" ids="Free Play,4C/1C,3C/1C,2C/1C,1C/4C,1C/3C,1C/2C,1C/1C"/><dip name="Unknown" bits="3" ids="On,Off"/><dip name="Unknown" bits="4" ids="On,Off"/><dip name="Unknown" bits="5" ids="On,Off"/><dip name="Unknown" bits="6" ids="On,Off"/><dip name="Unknown" bits="7" ids="On,Off"/><dip name="Unknown" bits="8" ids="On,Off"/><dip name="Unknown" bits="9" ids="On,Off"/><dip name="Unknown" bits="10" ids="On,Off"/><dip name="Unknown" bits="11" ids="On,Off"/><dip name="Demo Sounds" bits="12" ids="Off,On"/><dip name="Lives" bits="13" ids="4,2"/><dip name="Region" bits="14,15" ids="France?,Europe?,USA,Japan"/></switches>
+
+    <buttons names="Shot,Missile,Bomb,-,-,-,-,-,Start,Coin,Pause,Service"
+             default="A,B,X,Y,Start,Select,L,R" count="4"/>
+</misterromdescription>

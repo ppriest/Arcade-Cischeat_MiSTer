@@ -1,0 +1,31 @@
+# Cisco Heat MAME write timing
+
+Runs use MAME 0.289 and 1,800 measured frames after the configured skip. The play run inserts coin at frame 600.
+
+"vblank start 14" below is where MAME's frame notifier runs. Cisco Heat sets
+VIDEO_UPDATE_AFTER_VBLANK (cischeat.cpp:1777), so that is vblank END, the point MAME draws the
+frame and reads the sprite list and scroll registers; the "vblank" column is therefore not
+vblank. Read the columns as measured from MAME's draw point. The sprite strip is flat: the game
+writes sprite RAM through the whole frame.
+
+## Attract
+
+cischeat: 256 lines, vblank start 14 (242 lines of vblank), 1800 frames
+  region      /frame  +0..1 vblank +0..23  from vblank start, 8 lines a column
+  sprites      144.0   0.6%  96.0%  11.8%  |0001000000000000000000000000.000|
+  scroll0       19.4   1.0%  94.3%  16.0%  |00000000000000000000000000000000|
+  scroll1       19.9   0.7%  94.9%  17.5%  |0010000000000000000000000000.000|
+  scroll2       40.2   0.8%  84.6%   8.3%  |00000000000000000000000000000110|
+  video_regs     8.4   0.1%  87.3%   3.5%  |..0.........................611.|
+  scroll_regs     2.6   0.0% 100.0%   0.1%  | .      ..   .  .   .  ..   #   |
+
+## Play
+
+cischeat_play: 256 lines, vblank start 14 (242 lines of vblank), 1800 frames
+  region      /frame  +0..1 vblank +0..23  from vblank start, 8 lines a column
+  sprites      435.8   0.8%  95.1%   9.7%  |00000000000000000000000000000000|
+  scroll2       15.9   1.1%  95.1%   9.9%  |00000000000000000000000000000000|
+  video_regs    14.7   0.4%  90.2%   6.3%  |00000000000000000000000000003000|
+  scroll_regs     2.5   0.0% 100.0%   0.0%  |                            #   |
+
+

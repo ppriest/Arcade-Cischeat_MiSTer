@@ -98,3 +98,6 @@ releases/*.rbf
 **/.DS_Store
 __pycache__/
 *.pyc
+
+# synth_check: junction so fx68k's project-relative $readmemb paths resolve
+rtl/synth_check/fx68k/rtl
