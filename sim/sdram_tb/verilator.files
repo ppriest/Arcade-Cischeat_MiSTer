@@ -1,7 +1,5 @@
-// SDRAM throughput bench: the vendored controller stack and the chip model
+// SDRAM throughput bench: the bank-interleaved controller and the timing-checking chip model
 -Wno-fatal
-rtl/memory/sdram/sdram.sv
-rtl/memory/sdram_phy.sv
-rtl/memory/sdram_arbiter.sv
-sim/common/sdram_chip_model_wide.sv
+rtl/memory/sdram_sched.sv
+sim/common/sdram_chip_model_timed.sv
 sim/sdram_tb/tb_sdram.sv

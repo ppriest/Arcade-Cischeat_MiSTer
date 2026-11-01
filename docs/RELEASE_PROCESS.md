@@ -57,7 +57,7 @@ Steps for a release:
    shows this build's date and the right MRA count. Files in `unsupported/` and `_dev/` are not
    published, so keep work in progress there.
 
-**Current state:** <one line: what the latest build passes or fails, with the number>.
+**Current state:** `Arcade-Cischeat_20261101.rbf` (`6b64795`, default seed) meets timing on every clock, worst setup slack 0.346 ns.
 
 ## Submitting the core upstream
 

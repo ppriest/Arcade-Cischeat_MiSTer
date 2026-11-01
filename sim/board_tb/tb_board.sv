@@ -62,6 +62,7 @@ module tb_board;
 	string frame_dir = "debug/state";
 	int    nopix = 0;
 	int    board_sel = 1;                // +BOARD: 0 Big Run, 1 Cisco Heat
+	int    road_dump = -1;               // +ROADDUMP: write both road lists as this frame ends
 
 	initial begin
 		void'($value$plusargs("IMAGE=%s", image_path));
@@ -74,6 +75,7 @@ module tb_board;
 		void'($value$plusargs("FRAMES=%d", frames_out));
 		void'($value$plusargs("NOPIX=%d", nopix));
 		void'($value$plusargs("BOARD=%d", board_sel));
+		void'($value$plusargs("ROADDUMP=%d", road_dump));
 		if ($value$plusargs("DUMPFRAMES=%d", dump_frames)) begin
 			frames_out = dump_frames;
 			frame_dir  = "debug/board";
@@ -150,7 +152,7 @@ module tb_board;
 		.SDRAM_nCS(sd_ncs), .SDRAM_nWE(sd_nwe), .SDRAM_nRAS(sd_nras), .SDRAM_nCAS(sd_ncas), .SDRAM_CKE(sd_cke)
 	);
 
-	sdram_chip_model_wide u_chip (
+	sdram_chip_model_timed #(.SWIZZLE(1'b1)) u_chip (
 		.clk(clk_mem), .SDRAM_DQ(sd_dq), .SDRAM_A(sd_a), .SDRAM_BA(sd_ba), .SDRAM_nCS(sd_ncs),
 		.SDRAM_nWE(sd_nwe), .SDRAM_nRAS(sd_nras), .SDRAM_nCAS(sd_ncas)
 	);
@@ -175,16 +177,22 @@ module tb_board;
 				ext_bad++;
 			end
 	longint gfx_bad = 0;
+	// u_mem.addr holds the bank-remapped address (cischeat_sdram's swz, its own inverse)
+	function automatic logic [25:0] unswz(input logic [25:0] a);
+		return {a[25:5], a[4:3] ^ a[8:7], a[2:0]};
+	endfunction
 	always_ff @(posedge clk) if (!ideal)
 		for (int c = 0; c < 9; c++)
-			if (s_gfx_valid[c])
+			if (s_gfx_valid[c]) begin
+				logic [25:0] ga;
+				ga = unswz(u_mem.addr[5 + c]);
 				for (int k = 0; k < 4; k++)
-					if (s_gfx_rdata[c][16 * k +: 16] !== sdram[{u_mem.addr[5 + c][25:3], 2'(k)}]) begin
+					if (s_gfx_rdata[c][16 * k +: 16] !== sdram[{ga[25:3], 2'(k)}]) begin
 						if (gfx_bad < 5) $display("BAD gfx %0d granule %07h word %0d: %04h, image %04h", c,
-						                          u_mem.addr[5 + c], k, s_gfx_rdata[c][16 * k +: 16],
-						                          sdram[{u_mem.addr[5 + c][25:3], 2'(k)}]);
+						                          ga, k, s_gfx_rdata[c][16 * k +: 16], sdram[{ga[25:3], 2'(k)}]);
 						gfx_bad++;
 					end
+			end
 
 	// ---- external ports: a request is its rising edge; ready is one clock ----
 	int   ext_wait [5];
@@ -441,7 +449,7 @@ module tb_board;
 	// lines the cutoff shortened
 	int sl_t = -1, sl_max = 0, sl_y = 0, sl_all = 0, sl_cut = 0, sl_cut_all = 0;
 	logic sl_busy_d = 1'b0;
-	// where the worst line's clocks went: pixels drawn, L_PIX waiting on a granule, everything
+	// where the worst line's clocks went: pixels drawn, the drawer waiting on a granule, everything
 	// else (record pass and setup), and the records drawn
 	int sl_pix = 0, sl_wait = 0, sl_rec = 0, sw_pix = 0, sw_wait = 0, sw_rec = 0, sl_gr = 0, sw_gr = 0;
 	always @(posedge clk) if (loaded) begin
@@ -451,13 +459,8 @@ module tb_board;
 			sl_t++;
 			sl_gr += $countones(dut.u_video.spr.gfx_req);
 			if (dut.u_video.spr.st == 4'd10 && dut.u_video.spr.mul_n == 0) sl_rec++;
-			if (dut.u_video.spr.st == 4'd11) begin
-				if (dut.u_video.spr.have_gran
-				    && !(dut.u_video.spr.px[8] || dut.u_video.spr.s >= dut.u_video.spr.wsrc || dut.u_video.spr.late))
-					sl_pix++;
-				else
-					sl_wait++;
-			end
+			if (dut.u_video.spr.d_draw) sl_pix++;
+			if (dut.u_video.spr.d_wait) sl_wait++;
 		end
 		if (sl_busy_d && !dut.u_video.eng_busy[5] && sl_t >= 0 && !dut.u_video.spr.st_frame) begin
 			if (sl_t > sl_max) begin
@@ -485,15 +488,29 @@ module tb_board;
 			         {dut.c_addr[0], 1'b0});
 			$display("  sdram demand per line: max %0d (video %0d, cpu %0d), mean %0d; lines over 192 %0d, 256 %0d, 279 %0d",
 			         d_max, d_vmax, d_cmax, d_n ? int'(d_sum / d_n) : 0, d_over[0], d_over[1], d_over[2]);
+			// both road line lists as the frame ends, in the format scripts/zoomroad_ref.py reads
+			if (fr_k == road_dump) begin
+				int rfd;
+				rfd = $fopen($sformatf("%s/roads%0d.txt", frame_dir, fr_k), "w");
+				for (int l = 0; l < 256; l++) begin
+					$fwrite(rfd, "R0 %0d", l);
+					for (int w = 0; w < 4; w++) $fwrite(rfd, " %02h%02h", dut.u_rl0.hi[l * 4 + w], dut.u_rl0.lo[l * 4 + w]);
+					$fwrite(rfd, "\nR1 %0d", l);
+					for (int w = 0; w < 4; w++) $fwrite(rfd, " %02h%02h", dut.u_rl1.hi[l * 4 + w], dut.u_rl1.lo[l * 4 + w]);
+					$fwrite(rfd, "\n");
+				end
+				$fclose(rfd);
+			end
 			$display("  cpu sdram accesses this frame: main %0d, road1 %0d, road2 %0d, sound %0d, io %0d",
 			         d_fill[0], d_fill[1], d_fill[2], d_fill[3], d_fill[4]);
 			$display("  video accesses per line at most: tilemaps %0d, roads %0d, sprites %0d", d_kmax[0], d_kmax[1], d_kmax[2]);
 			for (int i = 0; i < 3; i++) d_kmax[i] = 0;
 			for (int p = 0; p < 5; p++) d_fill[p] = 0;
-			if (!ideal) $display("  sdram: %0d wrong CPU words, %0d wrong gfx words so far", ext_bad, gfx_bad);
+			if (!ideal) $display("  sdram: %0d wrong CPU words, %0d wrong gfx words, %0d timing errors so far",
+			                     ext_bad, gfx_bad, u_chip.errors);
 			$display("  audio peak %0d (YM2151 %0d, M6295 %0d / %0d, %0d M6295 writes)", a_pk, y_pk, o_pk[0], o_pk[1], o_wr);
 			a_pk = 0; y_pk = 0; o_pk[0] = 0; o_pk[1] = 0; o_wr = 0;
-			$display("  sprite line at most %0d clk (y=%0d: %0d records drawn, %0d granules, %0d pixel clk, %0d waiting in L_PIX, %0d other), %0d lines cut; run: at most %0d clk, %0d cut",
+			$display("  sprite line at most %0d clk (y=%0d: %0d records drawn, %0d granules, %0d pixel clk, %0d drawer waiting, %0d other), %0d lines cut; run: at most %0d clk, %0d cut",
 			         sl_max, sl_y, sw_rec, sw_gr, sw_pix, sw_wait, sl_max - sw_pix - sw_wait, sl_cut, sl_all, sl_cut_all);
 			sl_max = 0; sl_cut = 0;
 			d_max = 0; d_vmax = 0; d_cmax = 0; d_sum = 0; d_n = 0; d_over[0] = 0; d_over[1] = 0; d_over[2] = 0;
@@ -620,7 +637,8 @@ module tb_board;
 				for (int p = 1; p < 5; p++)
 					$display("PORT  %0d: %0d accesses, %0d writes", p, ext_n[p], ext_w[p]);
 				$display("GFX   %0d granules; sprite precompute at most %0d clk", gfx_n, pre_max);
-				if (!ideal) $display("SDRAM %0d wrong CPU words, %0d wrong gfx words", ext_bad, gfx_bad);
+				if (!ideal) $display("SDRAM %0d wrong CPU words, %0d wrong gfx words, %0d timing errors",
+				                     ext_bad, gfx_bad, u_chip.errors);
 				$finish;
 			end
 		end

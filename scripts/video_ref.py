@@ -5,7 +5,8 @@
     python scripts/video_ref.py               # every capture into debug/video_tb/
     bash scripts/run_sim.sh video_tb          # reads debug/video_tb/cases.txt
 
-Shared: the five graphics regions as 64-bit little-endian granules. Per case:
+Shared: the five graphics regions as 64-bit little-endian granules, the scroll
+regions in the loader's tile-pair layout. Per case:
 the capture's scroll RAMs, road line lists, sprite list, palette and scroll
 registers, and the expected frame for bitmap rows 16..239 as palette index
 ({shadow, index}) and RGB. The expected frame is scripts/sprite_acc.py's
@@ -19,6 +20,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import render_model as rm  # noqa: E402
 import sprite_acc as sa  # noqa: E402
+from tile_layout import pair_tiles  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 OUT = REPO / "debug" / "video_tb"
@@ -55,7 +57,8 @@ def main():
         print(f"{name}: written")
         gfx = c.gfx
     for region in ("scroll0", "scroll1", "scroll2", "road0", "sprites"):
-        g = np.frombuffer(gfx[region], dtype="<u8")
+        data = pair_tiles(bytes(gfx[region])) if region.startswith("scroll") else gfx[region]
+        g = np.frombuffer(data, dtype="<u8")
         (OUT / f"{region}.hex").write_text("".join(f"{int(v):016x}\n" for v in g))
     (OUT / "cases.txt").write_text("".join(f"{n}\n" for n in names))
     return 0

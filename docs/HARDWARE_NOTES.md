@@ -104,8 +104,8 @@ Main CPU, from the driver's table (lines 59-78), Cisco Heat / f1gpstar columns:
 | 081000-081fff | io shared RAM (f1gpstr2, wildplt) |
 | 082000-082401 | scroll registers, DSW 3, watchdog, sound latch/IRQ, CPU resets, active-layers stub |
 | 088000-0887ff | cabinet link RAM (2 KB on cischeat and f1gpstr2, 1 KB on f1gpstar; none on wildplt) |
-| 090000-097fff | shared RAM with road2 CPU |
-| 098000-09ffff | shared RAM with road1 CPU |
+| 090000-097fff | shared RAM with road2 CPU (road1 on wildplt) |
+| 098000-09ffff | shared RAM with road1 CPU (road2 on wildplt) |
 | 0a0000-0a7fff | scroll RAM 0 |
 | 0a8000-0affff | scroll RAM 1 |
 | 0b0000-0b7fff | scroll RAM 2 |

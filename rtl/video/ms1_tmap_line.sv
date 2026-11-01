@@ -11,9 +11,13 @@
 // Output: all 256 pixels of the line are written as {color, pen}; pen 15 is
 // transparent and left to the mixer. The vram port is a registered read
 // (q valid one clock after addr). gfx_req is a one-clock pulse per 64-bit
-// granule (sdram_arbiter captures its rising edge); granule byte k is
-// rdata[8k +: 8], the loader's little-endian order, so a tile row's four
-// bytes are one half of a granule and its first pixel is byte 0's high nibble.
+// granule (sdram_sched captures its rising edge); granule byte k is
+// rdata[8k +: 8], the loader's little-endian order. The loader pairs tiles
+// (cischeat_rom_transform.sv): the granule at {code[13:2], code[0], py} * 8
+// holds row py of code (bytes 0..3) and of code + 2 (bytes 4..7), a tile row's
+// first pixel in its first byte's high nibble. A 16x16 tile's two halves are
+// codes c and c + 2, so its row is one fetch: a column reuses the granule the
+// column before it fetched when the address is the same.
 //
 // The next tile's vram read and gfx fetch overlap the current tile's eight
 // pixel writes.
@@ -81,6 +85,8 @@ module ms1_tmap_line (
 	logic        f_half;      // which half of the granule holds the row
 	logic [4:0]  f_color;
 	logic [63:0] f_gran;
+	logic        g_have;      // f_gran holds granule g_addr from this line
+	logic [25:0] g_addr, g_next;
 
 	// vram word for (col, row)
 	//   8x8:   col*32 + (row>>5)*1024*pages_x + row%32
@@ -102,6 +108,7 @@ module ms1_tmap_line (
 		else       code = {vram_q[11:0], col[0], row[0]};
 		code = code & code_mask;
 	end
+	assign g_next = gfx_base + {7'd0, code[13:2], code[0], py, 3'b000};
 
 	// ---- pixel side ------------------------------------------------------
 	logic        p_busy;
@@ -127,21 +134,28 @@ module ms1_tmap_line (
 					{row, py} <= 12'(({4'd0, vpos} + scroll_y[11:0])) & {row_mask, 3'b111};
 					col       <= scroll_x[11:3] & col_mask;
 					tile      <= 6'd0;
+					g_have    <= 1'b0;
 					fst       <= F_VADDR;
 				end
 
 				F_VADDR: fst <= F_VDATA;   // vram_addr = vidx is presented
 
 				F_VDATA: begin
-					gfx_addr <= gfx_base + {7'd0, code, py[2:1], 3'b000};
-					gfx_req  <= 1'b1;
-					f_half   <= py[0];
-					f_color  <= color5 ? vram_q[15:11] : {1'b0, vram_q[15:12]};
-					fst      <= F_WAIT;
+					f_half  <= code[1];
+					f_color <= color5 ? vram_q[15:11] : {1'b0, vram_q[15:12]};
+					if (g_have && g_addr == g_next)
+						fst <= F_HOLD;
+					else begin
+						gfx_addr <= g_next;
+						gfx_req  <= 1'b1;
+						g_addr   <= g_next;
+						fst      <= F_WAIT;
+					end
 				end
 
 				F_WAIT: if (gfx_valid) begin
 					f_gran <= gfx_rdata;
+					g_have <= 1'b1;
 					fst    <= F_HOLD;
 				end
 

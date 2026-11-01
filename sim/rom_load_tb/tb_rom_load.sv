@@ -9,7 +9,7 @@
 //     scripts/run_verilator.sh rom_load_tb
 //
 // Expected: debug/board/sdram.hex (MAME's regions after init, sound bitswap
-// and sprite untangle applied) below 0x0e00000, the raw image above it (the
+// sprite untangle and scroll tile pairing applied) below 0x0e00000, the raw image above it (the
 // OKI samples, untransformed). The DDR3 model holds DDRAM_BUSY high on a
 // pseudo-random quarter of clocks and answers a read 4 to 19 clocks later.
 
@@ -25,7 +25,7 @@ module tb_rom_load;
 	localparam int GOLD_WORDS = 26'h0e00000 / 2;
 
 	logic [63:0] ddr [IMG_BYTES / 8];
-	logic [15:0] gold [GOLD_WORDS];
+	logic [15:0] gold [IMG_BYTES / 2];     // compared below GOLD_WORDS only
 
 	// ---- DDR3 model ----
 	logic        d_busy, d_rd, d_ready, d_we;
@@ -61,7 +61,7 @@ module tb_rom_load;
 	logic [15:0] dl_data;
 
 	cischeat_rom_load u_load (
-		.clk(clk_mem), .reset, .gs88000(1'b1), .start, .length(28'(IMG_BYTES)), .busy,
+		.clk(clk_mem), .reset, .gatearray(1'b1), .gs88000(1'b1), .start, .length(28'(IMG_BYTES)), .busy,
 		.DDRAM_BUSY(d_busy), .DDRAM_BURSTCNT(d_cnt), .DDRAM_ADDR(d_addr), .DDRAM_DOUT(d_dout),
 		.DDRAM_DOUT_READY(d_ready), .DDRAM_RD(d_rd), .DDRAM_DIN(d_din), .DDRAM_BE(d_be),
 		.DDRAM_WE(d_we),
@@ -96,7 +96,7 @@ module tb_rom_load;
 		.SDRAM_nCS(sd_ncs), .SDRAM_nWE(sd_nwe), .SDRAM_nRAS(sd_nras), .SDRAM_nCAS(sd_ncas), .SDRAM_CKE(sd_cke)
 	);
 
-	sdram_chip_model_wide u_chip (
+	sdram_chip_model_timed #(.SWIZZLE(1'b1)) u_chip (
 		.clk(clk_mem), .SDRAM_DQ(sd_dq), .SDRAM_A(sd_a), .SDRAM_BA(sd_ba), .SDRAM_nCS(sd_ncs),
 		.SDRAM_nWE(sd_nwe), .SDRAM_nRAS(sd_nras), .SDRAM_nCAS(sd_ncas)
 	);
@@ -139,8 +139,8 @@ module tb_rom_load;
 			if (region_bad != 0) $display("DIFF %07h-%07h: %0d words", 2 * blk, 2 * blk + 26'h7ffff, region_bad);
 			bad += region_bad;
 		end
-		if (bad == 0) $display("PASS: %0d words equal", IMG_BYTES / 2);
-		else          $display("FAIL: %0d words differ", bad);
+		if (bad == 0 && u_chip.errors == 0) $display("PASS: %0d words equal, 0 SDRAM timing errors", IMG_BYTES / 2);
+		else $display("FAIL: %0d words differ, %0d SDRAM timing errors", bad, u_chip.errors);
 		$finish;
 	end
 

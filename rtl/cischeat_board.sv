@@ -57,6 +57,9 @@ module cischeat_board (
 	output logic [7:0]   r, g, b,
 
 	output logic         video_overrun,
+	output logic         spr_busy,
+	output logic         spr_cut_line,
+	output logic [16:0]  spr_dbg,
 
 	// savestate (docs/SAVESTATES.md): a 16-bit word stream out on save, in on load
 	input  logic         ss_save,
@@ -75,7 +78,8 @@ module cischeat_board (
 	output logic [23:1]  dbg_addr,
 	output logic [15:0]  dbg_data,
 	output logic         dbg_uds,
-	output logic         dbg_lds
+	output logic         dbg_lds,
+	output logic [127:0] snd_probe      // ISSP instance H (Cischeat.sv), DEBUG_ISSP builds only
 );
 
 	logic br, ch, f1, io, wp;
@@ -251,15 +255,15 @@ module cischeat_board (
 	assign ma = {c_addr[0], 1'b0};
 
 	// Cisco Heat (cischeat_map, cischeat.cpp 749-787): link 088000, shared RAM
-	// road2 090000 / road1 098000, scroll RAM 0a0000-0b7fff, palette 0b8000,
-	// 32 KB each. Big Run (bigrun_map, 694-730): link 084000, 16 KB windows from
+	// road2 090000 / road1 098000 (Wild Pilot the reverse, docs/HACKS.md),
+	// scroll RAM 0a0000-0b7fff, palette 0b8000, 32 KB each. Big Run (bigrun_map, 694-730): link 084000, 16 KB windows from
 	// 088000 in the same order.
 	logic m_rom, m_link, m_sh2, m_sh1, m_scr0, m_scr1, m_scr2, m_pal, m_work, m_io;
 	logic [13:0] m_wa;                  // word address inside a 16K-word RAM
 	assign m_rom  = ma < 24'h080000 || (ma >= 24'h100000 && ma < 24'h180000);
 	assign m_link = br ? ma[23:11] == 13'h0108 : ma[23:11] == 13'h0110;
-	assign m_sh2  = br ? ma[23:14] == 10'h022  : ma[23:15] == 9'h012;
-	assign m_sh1  = br ? ma[23:14] == 10'h023  : ma[23:15] == 9'h013;
+	assign m_sh2  = br ? ma[23:14] == 10'h022  : ma[23:15] == {8'h09, wp};
+	assign m_sh1  = br ? ma[23:14] == 10'h023  : ma[23:15] == {8'h09, !wp};
 	assign m_scr0 = br ? ma[23:14] == 10'h024  : ma[23:15] == 9'h014;
 	assign m_scr1 = br ? ma[23:14] == 10'h025  : ma[23:15] == 9'h015;
 	assign m_scr2 = br ? ma[23:14] == 10'h026  : ma[23:15] == 9'h016;
@@ -401,8 +405,8 @@ module cischeat_board (
 	end
 
 	// =====================================================================
-	// Road CPUs: [1] road1 (road list 0, shared at main 098000),
-	//            [2] road2 (road list 1, shared at main 090000)
+	// Road CPUs: [1] road1 (road list 0, shared at main 098000; Wild Pilot 090000),
+	//            [2] road2 (road list 1, shared at main 090000; Wild Pilot 098000)
 	// =====================================================================
 	logic [23:0] ra [3];
 	logic        r_sh [3], r_list [3], r_loc [3];
@@ -442,8 +446,9 @@ module cischeat_board (
 	logic [23:0] sa;
 	assign sa = {c_addr[3], 1'b0};
 
-	// gate array: GS88000 on Cisco Heat, D65006 elsewhere (ms1_gatearray.cpp
-	// 139-184, unlock sequences in ms1_gatearray.h 55, 69)
+	// gate array: GS88000 on Cisco Heat, D65006 on Big Run, none on the F1 GP Star
+	// family (cischeat.cpp 1818-1841; ms1_gatearray.cpp 139-184, unlock sequences in
+	// ms1_gatearray.h 55, 69)
 	logic [15:0] ga_ram [5];
 	logic        ga_hs, ga_hit;
 	assign ga_hit = ga_hs && ({ga_ram[4][11:0], 6'd0} == {sa[17:6], 6'd0});
@@ -455,7 +460,7 @@ module cischeat_board (
 	logic s_rom, s_ram, s_ga_w;
 	assign s_rom  = sa < 24'h040000;
 	assign s_ram  = f1 ? sa[23:17] == 7'h07 : sa[23:16] == 8'h0f;   // 0e0000-0fffff on F1 GP Star
-	assign s_ga_w = sa[23:16] == 8'h02;
+	assign s_ga_w = !f1 && sa[23:16] == 8'h02;
 	assign c_ext[3]    = (s_rom && !c_we[3] && !ga_hit) || s_ram;
 	logic e_sram;
 	assign e_sram       = op_req && op_sec == 5'd17;
@@ -562,6 +567,35 @@ module cischeat_board (
 		audio_l <= mix_l > 18'sd32767 ? 16'sh7fff : mix_l < -18'sd32768 ? 16'sh8000 : mix_l[15:0];
 		audio_r <= mix_r > 18'sd32767 ? 16'sh7fff : mix_r < -18'sd32768 ? 16'sh8000 : mix_r[15:0];
 	end
+
+`ifdef DEBUG_ISSP
+	// sound probes: is the sound CPU running, does it reach the chips, does anything come out
+	logic [23:0] sp_addr;
+	logic [15:0] sp_cyc, sp_ym;
+	logic [11:0] sp_ok0, sp_ok1;
+	logic [14:0] sp_ympk, sp_outpk;
+	logic [12:0] sp_okpk;
+	always_ff @(posedge clk)
+		if (reset) begin
+			sp_cyc <= '0; sp_ym <= '0; sp_ok0 <= '0; sp_ok1 <= '0;
+			sp_ympk <= '0; sp_okpk <= '0; sp_outpk <= '0;
+		end else begin
+			if (c_stb[3] || ext_ready[3]) begin
+				sp_addr <= sa;
+				sp_cyc  <= sp_cyc + 16'd1;
+			end
+			if (ym_cs) sp_ym <= sp_ym + 16'd1;
+			if (s_wr && sa[23:2] == 22'h028000 && c_be[3][0]) sp_ok0 <= sp_ok0 + 12'd1;
+			if (s_wr && sa[23:2] == 22'h030000 && c_be[3][0]) sp_ok1 <= sp_ok1 + 12'd1;
+			if (!ym_l[15] && ym_l[14:0] > sp_ympk) sp_ympk <= ym_l[14:0];
+			if (!oki_snd[0][13] && oki_snd[0][12:0] > sp_okpk) sp_okpk <= oki_snd[0][12:0];
+			if (!oki_snd[1][13] && oki_snd[1][12:0] > sp_okpk) sp_okpk <= oki_snd[1][12:0];
+			if (!audio_l[15] && audio_l[14:0] > sp_outpk) sp_outpk <= audio_l[14:0];
+		end
+	assign snd_probe = {4'd0, c_reset[3], sp_outpk, sp_okpk, sp_ympk, sp_ok1, sp_ok0, sp_ym, sp_cyc, sp_addr};
+`else
+	assign snd_probe = '0;
+`endif
 
 	always_ff @(posedge clk) ym_irq_n_d <= reset ? 1'b1 : ym_irq_n;
 	assign ym_irq_edge = ym_irq_n_d && !ym_irq_n;
@@ -875,7 +909,7 @@ module cischeat_board (
 
 	cischeat_video u_video (
 		.clk, .reset(sys_reset), .board, .frame_go, .y0(8'd16), .line_go, .vpos(line_vpos),
-		.busy(), .overrun(video_overrun),
+		.busy(), .overrun(video_overrun), .spr_busy, .spr_cut_line, .spr_dbg,
 		.scroll_x(sx), .scroll_y(sy), .scroll_ctrl(sc),
 		.tmap_base('{26'h02c0000, 26'h0340000, 26'h03c0000}),
 		.tmap_mask(tmask),

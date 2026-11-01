@@ -28,6 +28,9 @@ module cischeat_video (
 	input  logic [7:0]   vpos,
 	output logic         busy,
 	output logic         overrun,
+	output logic         spr_busy,      // sprite engine working
+	output logic         spr_cut_line,  // pulse at line_go: the sprite cutoff shortened the last line
+	output logic [16:0]  spr_dbg,       // probes: {line, granules issued, the engine's dbg}
 
 	// layer registers, held for the frame by the caller
 	input  logic [15:0]  scroll_x [3],
@@ -180,6 +183,9 @@ module cischeat_video (
 	logic [7:0]  s_x;
 	logic [10:0] s_d;
 
+	logic [5:0] spr_dbg_e;
+	logic [7:0] spr_vpos;
+
 	// cut a sprite line before the next line_go (384 pixels x 8 clocks)
 	jaleco_zoomspr_line #(.LINE_CLK(3072)) spr (
 		.clk, .reset, .frame_start(frame_go), .y0, .start(line_go), .vpos, .busy(eng_busy[5]), .cut(spr_cut),
@@ -187,8 +193,11 @@ module cischeat_video (
 		.list_addr(slist_addr), .list_q(slist_q),
 		.gfx_req(gfx_req[8:5]), .gfx_addr(gfx_addr[5:8]),
 		.gfx_valid(gfx_valid[8:5]), .gfx_rdata(gfx_rdata[5:8]),
-		.lb_we(s_we), .lb_shadow(s_shadow), .lb_group(s_group), .lb_x(s_x), .lb_d(s_d)
+		.lb_we(s_we), .lb_shadow(s_shadow), .lb_group(s_group), .lb_x(s_x), .lb_d(s_d),
+		.dbg(spr_dbg_e)
 	);
+	always_ff @(posedge clk) if (line_go) spr_vpos <= vpos;
+	assign spr_dbg = {spr_vpos, 3'(gfx_req[5]) + 3'(gfx_req[6]) + 3'(gfx_req[7]) + 3'(gfx_req[8]), spr_dbg_e};
 
 	// sprite groups: {opaque, color, pen} and the shadow bit in separate buffers,
 	// so an opaque write clears shadow and a shadow write leaves the rest
@@ -296,5 +305,8 @@ module cischeat_video (
 	always_ff @(posedge clk)
 		if (reset)                       overrun <= 1'b0;
 		else if (line_go && busy)        overrun <= 1'b1;
+
+	assign spr_busy = eng_busy[5];
+	always_ff @(posedge clk) spr_cut_line <= line_go && spr_cut;
 
 endmodule

@@ -114,8 +114,10 @@ local function capture()
     f:close()
 
     dump("work_ram", main, 0x0f0000, 32768)
-    dump("shared_road1", main, 0x098000, 16384)
-    dump("shared_road2", main, 0x090000, 16384)
+    -- road CPU 1's window is the upper one except on Wild Pilot (docs/HACKS.md)
+    local wp = manager.machine.system.name == "wildplt"
+    dump("shared_road1", main, wp and 0x090000 or 0x098000, 16384)
+    dump("shared_road2", main, wp and 0x098000 or 0x090000, 16384)
     dump("scroll0", main, 0x0a0000, 16384)
     dump("scroll1", main, 0x0a8000, 16384)
     dump("scroll2", main, 0x0b0000, 16384)

@@ -1,0 +1,20 @@
+{"groups": [
+  {"name": "Main CPU 68000",  "match": "u_board\\|cpu\\[0\\]\\.",                    "color": "#e6194b"},
+  {"name": "Road CPUs 68000", "match": "u_board\\|cpu\\[[12]\\]\\.",                 "color": "#fabed4"},
+  {"name": "Sound CPU 68000", "match": "u_board\\|cpu\\[3\\]\\.",                    "color": "#f58231"},
+  {"name": "I/O CPU 68000",   "match": "u_board\\|cpu\\[4\\]\\.",                    "color": "#ffd8b1"},
+  {"name": "YM2151",          "match": "u_board\\|u_ym",                             "color": "#ffe119"},
+  {"name": "M6295 x2",        "match": "u_board\\|u_oki",                            "color": "#808000"},
+  {"name": "Video",           "match": "u_board\\|u_video",                          "color": "#3cb44b"},
+  {"name": "Scroll RAM",      "match": "u_board\\|scr\\[\\d\\]\\.",                  "color": "#aaffc3"},
+  {"name": "Shared RAM",      "match": "u_board\\|(u_sh[12]|u_iosh|road\\[\\d\\]\\.|u_rl[01]|u_ioloc)", "color": "#42d4f4"},
+  {"name": "Work RAM",        "match": "u_board\\|u_work",                           "color": "#911eb4"},
+  {"name": "Palette",         "match": "u_board\\|u_pal",                            "color": "#f032e6"},
+  {"name": "Board other",     "match": "^emu\\|u_board",                             "color": "#bfef45"},
+  {"name": "SDRAM",           "match": "^emu\\|u_sdram",                             "color": "#4363d8"},
+  {"name": "ROM load",        "match": "^emu\\|u_rom_load",                          "color": "#469990"},
+  {"name": "CRT V-Size",      "match": "u_crt_vsize",                                "color": "#9a6324"},
+  {"name": "CRT Adjust",      "match": "u_crt_adjust",                               "color": "#dcbeff"},
+  {"name": "Video mixer/scaler", "match": "^emu\\|(arcade_video|video_freak|screen_rotate_two)", "color": "#000075"},
+  {"name": "hps_io",          "match": "^emu\\|hps_io",                              "color": "#a9a9a9"}
+]}

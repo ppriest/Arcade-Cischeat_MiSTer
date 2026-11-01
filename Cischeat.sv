@@ -197,7 +197,7 @@ wire [63:0] ldr_DDRAM_DIN;
 
 // ldr_start is one clk_sys cycle, two clk_mem cycles; the loader takes the first
 cischeat_rom_load u_rom_load (
-	.clk(clk_mem), .reset(ldr_reset_s[1]), .gs88000(board == 3'd1),
+	.clk(clk_mem), .reset(ldr_reset_s[1]), .gatearray(board <= 3'd1), .gs88000(board == 3'd1),
 	.start(ldr_start), .length(28'h0f00000), .busy(ldr_active),
 	.DDRAM_BUSY(DDRAM_BUSY), .DDRAM_BURSTCNT(ldr_DDRAM_BURSTCNT), .DDRAM_ADDR(ldr_DDRAM_ADDR),
 	.DDRAM_DOUT(DDRAM_DOUT), .DDRAM_DOUT_READY(DDRAM_DOUT_READY), .DDRAM_RD(ldr_DDRAM_RD),
@@ -328,7 +328,9 @@ wire [1:0]  snd_req, snd_valid;
 wire [25:0] snd_addr [2];
 wire [63:0] snd_rdata;
 
-wire       core_ce, core_hb, core_vb, core_hs, core_vs, video_overrun;
+wire       core_ce, core_hb, core_vb, core_hs, core_vs, video_overrun, spr_busy, spr_cut_line;
+wire [16:0] spr_dbg;
+wire [127:0] snd_probe;
 wire        dbg_stb;
 wire [23:1] dbg_addr;
 wire [7:0] core_r, core_g, core_b;
@@ -342,12 +344,13 @@ cischeat_board u_board (
 	.snd_req, .snd_addr, .snd_valid, .snd_rdata,
 	.ce_pix(core_ce), .hblank(core_hb), .vblank(core_vb), .hsync(core_hs), .vsync(core_vs),
 	.r(core_r), .g(core_g), .b(core_b),
-	.video_overrun,
+	.video_overrun, .spr_busy, .spr_cut_line, .spr_dbg,
 	.audio_l(AUDIO_L), .audio_r(AUDIO_R),
 	.ss_save(1'b0), .ss_load(1'b0), .ss_busy(), .ss_error(),
 	.so_valid(), .so_data(), .so_ready(1'b1),
 	.si_valid(1'b0), .si_data(16'd0), .si_ready(),
-	.dbg_stb, .dbg_we(), .dbg_addr, .dbg_data(), .dbg_uds(), .dbg_lds()
+	.dbg_stb, .dbg_we(), .dbg_addr, .dbg_data(), .dbg_uds(), .dbg_lds(),
+	.snd_probe
 );
 
 cischeat_sdram u_sdram (
@@ -363,7 +366,9 @@ cischeat_sdram u_sdram (
 `ifdef DEBUG_ISSP
 // Instance F (scripts/read_issp.tcl's fields_F): [15:0] frames, [38:16] the main CPU's last bus word
 // address (A23-A1), [54:39] its bus cycles, [59:55] overrun, ldr_active, rom_loaded, core_reset,
-// ioctl_download, [60] pause, [127] pll_locked. Source bit 0 clears the counters.
+// ioctl_download, [60] pause, [84:61] sprite lines cut, [100:85] frames with a cut line, [108:101]
+// most cut lines in one frame, [120:109] most clocks a sprite line took (cutoff at 3072),
+// [127] pll_locked. Source bit 0 clears the counters.
 reg  [15:0] issp_frames = 16'd0, issp_cycles = 16'd0;
 reg  [23:0] issp_addr = 24'd0;
 reg         issp_vb_d = 1'b0;
@@ -379,14 +384,101 @@ always @(posedge clk_sys) begin
 	end
 	if (dbg_stb) issp_addr <= {dbg_addr, 1'b0};
 end
+// sprite cutoff, counted while playing
+reg  [23:0] issp_cut = 24'd0;
+reg  [15:0] issp_cut_fr = 16'd0;
+reg  [7:0]  issp_cut_now = 8'd0, issp_cut_max = 8'd0;
+reg  [11:0] issp_sl_t = 12'd0, issp_sl_max = 12'd0;
+reg         issp_sb_d = 1'b0;
+always @(posedge clk_sys) begin
+	issp_sb_d <= spr_busy;
+	if (spr_busy && !issp_sb_d) issp_sl_t <= 12'd1;
+	else if (spr_busy && issp_sl_t != 12'hfff) issp_sl_t <= issp_sl_t + 12'd1;
+	if (issp_clear) begin
+		issp_cut     <= 24'd0;
+		issp_cut_fr  <= 16'd0;
+		issp_cut_now <= 8'd0;
+		issp_cut_max <= 8'd0;
+		issp_sl_max  <= 12'd0;
+	end else begin
+		// the frame's precompute also runs on the engine: line lengths only up to 3072 count
+		if (!spr_busy && issp_sb_d && issp_sl_t <= 12'd3072 && issp_sl_t > issp_sl_max) issp_sl_max <= issp_sl_t;
+		if (spr_cut_line) begin
+			issp_cut <= issp_cut + 24'd1;
+			if (issp_cut_now != 8'hff) issp_cut_now <= issp_cut_now + 8'd1;
+		end
+		if (core_vb && !issp_vb_d) begin
+			if (issp_cut_now != 0) issp_cut_fr <= issp_cut_fr + 16'd1;
+			if (issp_cut_now > issp_cut_max) issp_cut_max <= issp_cut_now;
+			issp_cut_now <= 8'd0;
+		end
+	end
+end
 altsource_probe #(
 	.sld_auto_instance_index("YES"), .instance_id("F"),
 	.probe_width(128), .source_width(1), .source_initial_value("0"),
 	.enable_metastability("NO"), .lpm_type("altsource_probe")
 ) u_issp_f (
-	.probe({pll_locked, 66'd0, pause_core, ioctl_download, core_reset, rom_loaded, ldr_active,
+	.probe({pll_locked, 6'd0, issp_sl_max, issp_cut_max, issp_cut_fr, issp_cut, pause_core, ioctl_download, core_reset, rom_loaded, ldr_active,
 	        video_overrun, issp_cycles, issp_addr[23:1], issp_frames}),
 	.source(issp_clear), .source_clk(clk_sys), .source_ena(1'b1)
+);
+
+// Instance G (fields_G): where a sprite line's clocks went. For the last cut line: [11:0] clocks,
+// [23:12] pixels drawn, [35:24] drawer waiting on a granule, [43:36] records queued, [53:44]
+// granules issued, [67:54] fetches in flight summed per clock (/ granules = mean latency),
+// [75:68] its line, [91:76] F's frame count when it was cut. For the longest line (F's
+// spr_line_max): [103:92] pixels, [115:104] waiting, [125:116] granules. Cleared with F.
+reg  [11:0] gl_pix = 0, gl_wait = 0, pl_clk = 0, pl_pix = 0, pl_wait = 0, cl_clk = 0, cl_pix = 0, cl_wait = 0, wl_pix = 0, wl_wait = 0;
+reg  [7:0]  gl_rec = 0, pl_rec = 0, cl_rec = 0, pl_vpos = 0, cl_vpos = 0;
+reg  [9:0]  gl_gran = 0, pl_gran = 0, cl_gran = 0, wl_gran = 0;
+reg  [13:0] gl_infl = 0, pl_infl = 0, cl_infl = 0;
+reg  [15:0] cl_frame = 0;
+always @(posedge clk_sys) begin
+	if (spr_busy && !issp_sb_d) begin
+		gl_pix <= {11'd0, spr_dbg[0]}; gl_wait <= {11'd0, spr_dbg[1]}; gl_rec <= {7'd0, spr_dbg[2]};
+		gl_infl <= {11'd0, spr_dbg[5:3]}; gl_gran <= {7'd0, spr_dbg[8:6]};
+	end else if (spr_busy) begin
+		if (gl_pix  != 12'hfff) gl_pix  <= gl_pix  + spr_dbg[0];
+		if (gl_wait != 12'hfff) gl_wait <= gl_wait + spr_dbg[1];
+		if (gl_rec  != 8'hff)   gl_rec  <= gl_rec  + spr_dbg[2];
+		if (gl_infl < 14'h3ff0) gl_infl <= gl_infl + spr_dbg[5:3];
+		if (gl_gran < 10'h3f8)  gl_gran <= gl_gran + spr_dbg[8:6];
+	end
+	// a line just ended (the frame's precompute is longer than any line and is skipped)
+	if (!spr_busy && issp_sb_d && issp_sl_t <= 12'd3072) begin
+		pl_clk <= issp_sl_t; pl_pix <= gl_pix; pl_wait <= gl_wait; pl_rec <= gl_rec;
+		pl_gran <= gl_gran; pl_infl <= gl_infl; pl_vpos <= spr_dbg[16:9];
+	end
+	if (issp_clear) begin
+		cl_clk <= 0; cl_pix <= 0; cl_wait <= 0; cl_rec <= 0; cl_gran <= 0; cl_infl <= 0; cl_vpos <= 0; cl_frame <= 0;
+		wl_pix <= 0; wl_wait <= 0; wl_gran <= 0;
+	end else begin
+		if (spr_cut_line) begin
+			cl_clk <= pl_clk; cl_pix <= pl_pix; cl_wait <= pl_wait; cl_rec <= pl_rec;
+			cl_gran <= pl_gran; cl_infl <= pl_infl; cl_vpos <= pl_vpos; cl_frame <= issp_frames;
+		end
+		if (!spr_busy && issp_sb_d && issp_sl_t <= 12'd3072 && issp_sl_t > issp_sl_max) begin
+			wl_pix <= gl_pix; wl_wait <= gl_wait; wl_gran <= gl_gran;
+		end
+	end
+end
+altsource_probe #(
+	.sld_auto_instance_index("YES"), .instance_id("G"),
+	.probe_width(128), .source_width(1), .source_initial_value("0"),
+	.enable_metastability("NO"), .lpm_type("altsource_probe")
+) u_issp_g (
+	.probe({2'd0, wl_gran, wl_wait, wl_pix, cl_frame, cl_vpos, cl_infl, cl_gran, cl_rec, cl_wait, cl_pix, cl_clk}),
+	.source(), .source_clk(clk_sys), .source_ena(1'b1)
+);
+
+// Instance H (fields_H): the sound side, counted from reset (cischeat_board.sv, snd_probe)
+altsource_probe #(
+	.sld_auto_instance_index("YES"), .instance_id("H"),
+	.probe_width(128), .source_width(1), .source_initial_value("0"),
+	.enable_metastability("NO"), .lpm_type("altsource_probe")
+) u_issp_h (
+	.probe(snd_probe), .source(), .source_clk(clk_sys), .source_ena(1'b1)
 );
 `endif
 

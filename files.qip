@@ -54,9 +54,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/video/crt_chain.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/cischeat_timing.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/state/state_engine.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/cischeat_board.sv
-set_global_assignment -name SYSTEMVERILOG_FILE rtl/memory/sdram/sdram.sv
-set_global_assignment -name SYSTEMVERILOG_FILE rtl/memory/sdram_phy.sv
-set_global_assignment -name SYSTEMVERILOG_FILE rtl/memory/sdram_arbiter.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/memory/sdram_sched.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/memory/cischeat_sdram.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/memory/ddram_phy.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/memory/rom_loader.sv

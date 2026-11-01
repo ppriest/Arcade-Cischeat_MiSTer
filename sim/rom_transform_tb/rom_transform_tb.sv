@@ -1,9 +1,11 @@
 module tb_rom_transform;
 	localparam logic [25:0] SOUND_BASE = 26'h0280000;
 	localparam logic [25:0] SOUND_BYTES = 26'h0040000;
+	localparam logic [25:0] SCROLL_BASE = 26'h02c0000;
 	localparam logic [25:0] SPRITE_BASE = 26'h0400000;
 	localparam logic [25:0] SPRITE_BYTES = 26'h0400000;
 	logic        gs88000 = 1'b1;
+	logic        gatearray = 1'b1;
 	logic [25:0] raw_addr;
 	logic [15:0] raw_word;
 	logic [25:0] xf_addr;
@@ -78,8 +80,22 @@ module tb_rom_transform;
 				$fatal(1, "sprite transform mismatch at word %h: got %h:%h expected %h:%h",
 					i, xf_addr, xf_data, expected_sprite_addr, raw_word);
 		end
-		$display("PASS: %0d CPU words, %0d sound words and %0d sprite words", SOUND_BASE/2,
-			SOUND_BYTES/2, SPRITE_BYTES/2);
+		// Scroll regions: tile pairs (scripts/tile_layout.py). Byte offset
+		// a = code*32 + py*4 + k goes to (code>>2)*128 + code[0]*64 + py*8 +
+		// code[1]*4 + k; the word is unchanged.
+		for (i = 0; i < (SPRITE_BASE - SCROLL_BASE)/2; i = i + 1) begin
+			integer a, code, py, k;
+			a = i*2;
+			code = a / 32; py = (a / 4) % 8; k = a % 4;
+			raw_addr = SCROLL_BASE + a;
+			raw_word = i ^ 16'h1234;
+			#1;
+			if (xf_addr !== SCROLL_BASE + (code/4)*128 + (code%2)*64 + py*8 + ((code/2)%2)*4 + k
+			    || xf_data !== raw_word)
+				$fatal(1, "scroll transform mismatch at byte %h: got %h:%h", a, xf_addr, xf_data);
+		end
+		$display("PASS: %0d CPU words, %0d sound words, %0d sprite words and %0d scroll words",
+			SOUND_BASE/2, SOUND_BYTES/2, SPRITE_BYTES/2, (SPRITE_BASE - SCROLL_BASE)/2);
 		$finish;
 	end
 endmodule

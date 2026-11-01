@@ -18,7 +18,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
 from extract_romstart import SRC, blocks, region_records  # noqa: E402
-from mame_capture import mame_paths, rompath  # noqa: E402
+from coretools import mame_paths, rompath  # noqa: E402
 
 
 def declared_size(body, region):
@@ -49,7 +49,7 @@ def find_zip(setname):
     """The set's zip, else its parent's: a merged set keeps the clone's ROMs there."""
     mame_dir, _ = mame_paths()
     for name in (setname, parent_of(setname)):
-        for folder in rompath(mame_dir).split(";") if name else ():
+        for folder in rompath().split(";") if name else ():
             candidate = Path(folder) / f"{name}.zip"
             if candidate.is_file():
                 return candidate

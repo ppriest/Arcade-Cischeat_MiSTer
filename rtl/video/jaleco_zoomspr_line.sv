@@ -19,21 +19,25 @@
 // clears shadow; with lb_shadow = 1 it sets shadow only. lb_group is the pass
 // group from grp_of_pri[3*pri +: 3]. Records are drawn in ascending order.
 //
-// Timing: a record that does not draw costs one clock. A drawn pixel costs one
-// clock. Granules come through four gfx ports, one per slot: tile column c is
-// held in slot c mod 4, and each slot fetches the column of the four from the
-// current one in the walk direction that maps to it. Zoom is at least 8, so the
-// source step is at most 16 pixels and no column of a row is skipped: none of
-// these fetches is wasted except past the screen's right edge. A slot's tag
-// ({line parity, record}) marks whose granule it holds; a record ends without
-// waiting for its fetches, and one that lands late is never matched.
+// Timing: the line runs as three parts. The scanner walks the records, one
+// clock for a record that does not draw and a handful for one that does, and
+// queues each drawing record as a job (up to four). The fetcher issues the
+// queued jobs' granules in drawing order, one a clock, on whichever of the four
+// gfx ports is free, into an eight-entry ring; it runs ahead across records, so
+// a record's first granule is usually in by the time it is drawn. The drawer
+// takes the jobs in order and draws a pixel a clock while the ring's head holds
+// the column under it. Zoom is at least 8, so the source step is at most 16
+// pixels and no column is skipped: the only granules fetched and not drawn are
+// those of a record that runs off the screen's right edge, which the drawer
+// discards (it stops the fetcher on that record).
 //
 // Cutoff (LINE_CLK > 0): a line must be done LINE_CLK clocks after its start.
 // Once the clocks left would only cover passing the remaining records (one
-// each) plus CUT_SLACK for a fetch in flight, the engine stops drawing: the
-// record being drawn ends where it is, and the rest are passed without
-// drawing, which still advances their vertical accumulators. Records are drawn
-// in ascending order, so a cut line loses the last ones (docs/HACKS.md).
+// each) plus CUT_SLACK for the fetches in flight, the engine stops drawing: the
+// record being drawn ends where it is, the queued ones are dropped once the
+// fetches in flight return, and the rest are passed without drawing, which
+// still advances their vertical accumulators. Records are drawn in ascending
+// order, so a cut line loses the last ones (docs/HACKS.md).
 //
 // Ports: the list is the latched 4 KB copy, eight words per record
 // (word k at list_q[16k +: 16]), registered read. gfx_req[k] is a one-clock
@@ -71,7 +75,10 @@ module jaleco_zoomspr_line #(
 	output logic         lb_shadow,
 	output logic [2:0]   lb_group,
 	output logic [7:0]   lb_x,
-	output logic [10:0]  lb_d           // {color[6:0], pen[3:0]}
+	output logic [10:0]  lb_d,          // {color[6:0], pen[3:0]}
+
+	// probes: {fetches in flight, job queued, drawer waiting, pixel drawn}, per clock
+	output logic [5:0]   dbg
 );
 
 	// ---- serial divider: 20-bit numerator / 9-bit denominator ------------
@@ -115,7 +122,7 @@ module jaleco_zoomspr_line #(
 	typedef enum logic [3:0] {
 		S_IDLE,
 		P_RD, P_DEC, P_MUL, P_DX, P_DY, P_D0X, P_D0Y,
-		L_RD, L_EV, L_ROW, L_PIX, L_NEXT
+		L_RD, L_EV, L_ROW, L_PUSH, L_NEXT, L_END
 	} state_t;
 	state_t st;
 
@@ -169,52 +176,94 @@ module jaleco_zoomspr_line #(
 	// precompute working values
 	logic [11:0] sy12;
 
-	// line working values
+	// scanner working values
 	logic [8:0]  wsrc, hsrc;        // 16 * tiles
 	logic [8:0]  ty;                // source row in the sprite
-	logic [15:0] row_code;
-	logic [8:0]  s, e;              // horizontal accumulator
-	logic [8:0]  px;                // screen x, 256 = done
-	logic [8:0]  tx;
-	logic [3:0]  tile_col;
-
-	// granule slots: column c in slot c[1:0]
-	logic [3:0]  sl_busy, sl_full;
-	logic [3:0]  sl_col [4];
-	logic [8:0]  sl_tag [4];
-	logic [63:0] sl_gran [4];
-	logic [8:0]  tag;               // the record drawing now
-	logic [3:0]  want_col [4];      // the window column slot k should hold
-	logic [3:0]  want_ok;           // it exists in this record
-	logic [3:0]  sl_have;           // slot k holds it
-	assign tag = {vpos_l[0], idx};
-
-	always_comb
-		for (int k = 0; k < 4; k++) begin
-			logic [1:0] j;
-			logic [4:0] c;
-			j = pre_q.fx ? 2'(tile_col[1:0] - 2'(k)) : 2'(2'(k) - tile_col[1:0]);
-			c = pre_q.fx ? 5'(tile_col) - 5'(j) : 5'(tile_col) + 5'(j);
-			want_col[k] = c[3:0];
-			want_ok[k]  = !c[4] && c[3:0] <= pre_q.xn1;
-			sl_have[k]  = sl_full[k] && sl_col[k] == c[3:0] && sl_tag[k] == tag;
-		end
-
-	logic        have_gran;         // the current column's granule is in its slot
-	logic [63:0] gran;
-	assign have_gran = sl_have[tile_col[1:0]];
-	assign gran      = sl_gran[tile_col[1:0]];
 
 	assign wsrc = {1'b0, pre_q.xn1, 4'd0} + 9'd16;
 	assign hsrc = {1'b0, pre_q.yn1, 4'd0} + 9'd16;
-	assign tx   = pre_q.fx ? 9'(wsrc - 9'd1 - s) : s;
-	assign tile_col = tx[7:4];
 
-	// pen at tx within the loaded granule
-	logic [7:0] gbyte;
-	logic [3:0] pen;
-	assign gbyte = gran[{tx[3:1], 3'b000} +: 8];
-	assign pen   = tx[0] ? gbyte[3:0] : gbyte[7:4];
+	// ---- jobs: one per drawing record, scanner -> fetcher -> drawer ------
+	typedef struct packed {
+		logic [8:0]  s, e, px;      // horizontal state and screen x at the first pixel
+		logic [8:0]  wsrc;
+		logic [4:0]  qx;
+		logic [8:0]  rx, zx;
+		logic        fx, shadow;
+		logic [3:0]  c0;            // first column drawn
+		logic [4:0]  ncol;          // columns from c0 to the far edge
+		logic [15:0] row_code;
+		logic [3:0]  ty;
+		logic [6:0]  color;
+		logic [2:0]  group;
+	} job_t;
+
+	job_t        jq [4];
+	job_t        j_new;
+	logic [2:0]  jw, jf, jd;        // queue (scanner), fetch, draw; bit 2 is the wrap
+	logic [3:0]  fdone;             // per job slot: every granule issued, or the fetch stopped
+	logic        j_space, j_push;
+	assign j_space = 3'(jw - jd) != 3'd4;
+	assign j_push  = st == L_PUSH && !late && j_space;
+
+	// the job L_ROW would queue
+	logic [8:0]  n_s, n_tx;
+	assign n_s  = pre_q.x[10] ? pre_q.s0x : 9'd0;
+	assign n_tx = pre_q.fx ? 9'(wsrc - 9'd1 - n_s) : n_s;
+
+	// ---- granule ring, filled in issue order ------------------------------
+	logic [7:0]  r_full;
+	logic [2:0]  r_job  [8];
+	logic [63:0] r_gran [8];
+	logic [2:0]  rp, wp;
+	logic [3:0]  r_cnt;
+	logic [3:0]  p_busy;            // port k has a fetch in flight, for ring entry p_ent[k]
+	logic [2:0]  p_ent  [4];
+
+	// fetcher
+	logic        f_on;
+	logic [3:0]  f_c;
+	logic [4:0]  f_n;               // columns left
+	logic [1:0]  f_k;
+	logic        f_free;
+	job_t        fj;
+	assign fj = jq[jf[1:0]];
+	always_comb begin
+		f_free = 1'b0;
+		f_k    = 2'd0;
+		for (int k = 3; k >= 0; k--)
+			if (!p_busy[k]) begin f_free = 1'b1; f_k = 2'(k); end
+	end
+
+	// drawer
+	logic        d_on, d_skip, kill;
+	logic [8:0]  ds, de, dpx;
+	job_t        dj;
+	assign dj = jq[jd[1:0]];
+	logic        head_mine, head_ok;
+	assign head_mine = r_cnt != 4'd0 && r_job[rp] == jd;
+	assign head_ok   = head_mine && r_full[rp];
+	logic [8:0]  d_tx, s_nx, e_nx, tx_nx;
+	logic [9:0]  ex_sum;
+	assign d_tx   = dj.fx ? 9'(dj.wsrc - 9'd1 - ds) : ds;
+	assign ex_sum = {1'b0, de} + {1'b0, dj.rx};
+	assign s_nx   = (ex_sum >= {1'b0, dj.zx}) ? 9'(ds + dj.qx + 9'd1) : 9'(ds + dj.qx);
+	assign e_nx   = (ex_sum >= {1'b0, dj.zx}) ? 9'(ex_sum - {1'b0, dj.zx}) : ex_sum[8:0];
+	assign tx_nx  = dj.fx ? 9'(dj.wsrc - 9'd1 - s_nx) : s_nx;
+
+	// pen at d_tx within the head granule
+	logic [63:0] gran;
+	logic [7:0]  gbyte;
+	logic [3:0]  pen;
+	assign gran  = r_gran[rp];
+	assign gbyte = gran[{d_tx[3:1], 3'b000} +: 8];
+	assign pen   = d_tx[0] ? gbyte[3:0] : gbyte[7:4];
+
+	// a pixel this clock, or the drawer waiting on a granule (both read by sim/board_tb)
+	logic        d_draw, d_wait;
+	assign d_draw = d_on && !d_skip && head_ok && !late;
+	assign d_wait = d_on && !d_skip && !head_ok && !late;
+	assign dbg    = {3'(p_busy[0]) + 3'(p_busy[1]) + 3'(p_busy[2]) + 3'(p_busy[3]), j_push, d_wait, d_draw};
 
 	// vertical state of the record being evaluated
 	logic [8:0]  sy_s, sy_e;
@@ -225,10 +274,6 @@ module jaleco_zoomspr_line #(
 	assign on_line = pre_q.valid && ($signed({4'd0, vpos_l}) >= $signed(pre_q.top)) && (sy_s < hsrc);
 	assign ey_sum  = {1'b0, sy_e} + {1'b0, pre_q.ry};
 	assign go      = on_line && !(pre_q.x[10] == 1'b0 && pre_q.x[9:8] != 2'b00) && !late;
-
-	// horizontal step
-	logic [9:0] ex_sum;
-	assign ex_sum = {1'b0, e} + {1'b0, pre_q.rx};
 
 	assign busy = (st != S_IDLE);
 
@@ -244,7 +289,7 @@ module jaleco_zoomspr_line #(
 			cut <= 1'b0;
 		end else begin
 			if (lt != 12'hfff) lt <= lt + 12'd1;
-			if (late && busy && (st == L_PIX || (st == L_EV && on_line))) cut <= 1'b1;
+			if (late && busy && (jd != jw || st == L_PUSH || (st == L_EV && on_line))) cut <= 1'b1;
 		end
 
 	logic [15:0] w0, w1, w2, w3, w4, w6, w7;
@@ -256,17 +301,14 @@ module jaleco_zoomspr_line #(
 	assign zx_d = bigrun ? {1'b0, w1[7:0]}  : w1[8:0];
 	assign zy_d = bigrun ? {1'b0, w1[15:8]} : w2[8:0];
 
+	// ---- scanner -------------------------------------------------------
 	always_ff @(posedge clk) begin
 		pre_we   <= 1'b0;
 		vst_we   <= 1'b0;
 		dv_start <= 1'b0;
-		gfx_req  <= 4'h0;
-		lb_we    <= 1'b0;
 		if (reset) begin
-			st      <= S_IDLE;
-			idx     <= 8'd0;
-			sl_busy <= 4'h0;
-			sl_full <= 4'h0;
+			st  <= S_IDLE;
+			idx <= 8'd0;
 		end else begin
 			case (st)
 				S_IDLE:
@@ -382,7 +424,7 @@ module jaleco_zoomspr_line #(
 						st <= L_ROW;
 					else begin
 						idx <= idx + 8'd1;
-						if (idx == 8'd255) st <= S_IDLE;
+						if (idx == 8'd255) st <= L_END;
 					end
 				end
 
@@ -393,62 +435,157 @@ module jaleco_zoomspr_line #(
 						mul_b <= mul_b << 1;
 						mul_n <= mul_n - 3'd1;
 					end else begin
-						row_code  <= pre_q.code + 16'(mul_acc);
-						px        <= pre_q.x[10] ? 9'd0 : {1'b0, pre_q.x[7:0]};
-						s         <= pre_q.x[10] ? pre_q.s0x : 9'd0;
-						e         <= pre_q.x[10] ? pre_q.e0x : 9'd0;
-						st        <= L_PIX;
+						j_new.s        <= n_s;
+						j_new.e        <= pre_q.x[10] ? pre_q.e0x : 9'd0;
+						j_new.px       <= pre_q.x[10] ? 9'd0 : {1'b0, pre_q.x[7:0]};
+						j_new.wsrc     <= wsrc;
+						j_new.qx       <= pre_q.qx;
+						j_new.rx       <= pre_q.rx;
+						j_new.zx       <= pre_q.zx;
+						j_new.fx       <= pre_q.fx;
+						j_new.shadow   <= pre_q.shadow;
+						j_new.c0       <= n_tx[7:4];
+						j_new.ncol     <= pre_q.fx ? 5'(n_tx[7:4]) + 5'd1
+						                           : 5'(pre_q.xn1) + 5'd1 - 5'(n_tx[7:4]);
+						j_new.row_code <= pre_q.code + 16'(mul_acc);
+						j_new.ty       <= ty[3:0];
+						j_new.color    <= pre_q.color;
+						j_new.group    <= pre_q.group;
+						// wholly left of the screen: nothing to draw
+						st <= (n_s >= wsrc) ? L_NEXT : L_PUSH;
 					end
 
-				L_PIX:
-					if (px[8] || s >= wsrc || late)
-						st <= L_NEXT;
-					else begin
-						for (int k = 0; k < 4; k++)
-							if (want_ok[k] && !sl_have[k] && !sl_busy[k]) begin
-								gfx_addr[k] <= gfx_base + {3'd0, (row_code + {12'd0, want_col[k]}) & code_mask,
-								                           ty[3:0], 3'b000};
-								gfx_req[k]  <= 1'b1;
-								sl_busy[k]  <= 1'b1;
-								sl_full[k]  <= 1'b0;
-								sl_col[k]   <= want_col[k];
-								sl_tag[k]   <= tag;
-							end
-						if (have_gran) begin
-							if (pen != 4'hf) begin
-								lb_we     <= 1'b1;
-								lb_shadow <= (pen == 4'h0) && pre_q.shadow;
-								lb_group  <= pre_q.group;
-								lb_x      <= px[7:0];
-								lb_d      <= {pre_q.color, pen};
-							end
-							px <= px + 9'd1;
-							if (ex_sum >= {1'b0, pre_q.zx}) begin
-								s <= 9'(s + pre_q.qx + 9'd1);
-								e <= 9'(ex_sum - {1'b0, pre_q.zx});
-							end else begin
-								s <= 9'(s + pre_q.qx);
-								e <= ex_sum[8:0];
-							end
-						end
-					end
+				L_PUSH: if (late || j_space) st <= L_NEXT;
 
 				L_NEXT: begin
 					idx <= idx + 8'd1;
 					if (idx == 8'd255)
-						st <= S_IDLE;
+						st <= (st_frame) ? S_IDLE : L_END;
 					else
 						st <= (st_frame) ? P_RD : L_RD;
 				end
 
+				L_END:                      // every job drawn or dropped, nothing in flight
+					if (jd == jw && !f_on && p_busy == 4'h0) st <= S_IDLE;
+
 				default: st <= S_IDLE;
 			endcase
+		end
+	end
+
+	// ---- fetcher, ring and drawer --------------------------------------
+	always_ff @(posedge clk) begin
+		logic pop, push;
+		pop     = 1'b0;
+		push    = 1'b0;
+		gfx_req <= 4'h0;
+		lb_we   <= 1'b0;
+		kill    <= 1'b0;
+		if (reset || (start && st == S_IDLE)) begin
+			jw     <= 3'd0;
+			jf     <= 3'd0;
+			jd     <= 3'd0;
+			rp     <= 3'd0;
+			wp     <= 3'd0;
+			r_cnt  <= 4'd0;
+			f_on   <= 1'b0;
+			d_on   <= 1'b0;
+			d_skip <= 1'b0;
+			if (reset) p_busy <= 4'h0;
+		end else begin
+			if (j_push) begin
+				jq[jw[1:0]]    <= j_new;
+				fdone[jw[1:0]] <= 1'b0;
+				jw             <= jw + 3'd1;
+			end
+
+			if (late) begin
+				// cut: stop; once nothing is in flight drop the ring and every job
+				f_on   <= 1'b0;
+				d_on   <= 1'b0;
+				d_skip <= 1'b0;
+				if (p_busy == 4'h0) begin
+					rp    <= wp;
+					r_cnt <= 4'd0;
+					jf    <= jw;
+					jd    <= jw;
+				end
+			end else begin
+				// fetcher: the queued jobs' columns in drawing order
+				if (!f_on) begin
+					if (jf != jw) begin
+						f_c  <= fj.c0;
+						f_n  <= fj.ncol;
+						f_on <= 1'b1;
+					end
+				end else if (kill && jf == jd) begin
+					fdone[jf[1:0]] <= 1'b1;
+					jf             <= jf + 3'd1;
+					f_on           <= 1'b0;
+				end else if (f_free && r_cnt != 4'd8) begin
+					gfx_addr[f_k] <= gfx_base + {3'd0, (fj.row_code + {12'd0, f_c}) & code_mask, fj.ty, 3'b000};
+					gfx_req[f_k]  <= 1'b1;
+					p_busy[f_k]   <= 1'b1;
+					p_ent[f_k]    <= wp;
+					r_full[wp]    <= 1'b0;
+					r_job[wp]     <= jf;
+					wp            <= wp + 3'd1;
+					push           = 1'b1;
+					f_c           <= fj.fx ? f_c - 4'd1 : f_c + 4'd1;
+					f_n           <= f_n - 5'd1;
+					if (f_n == 5'd1) begin
+						fdone[jf[1:0]] <= 1'b1;
+						jf             <= jf + 3'd1;
+						f_on           <= 1'b0;
+					end
+				end
+
+				// drawer: a pixel a clock while the head holds the column under it
+				if (!d_on) begin
+					if (jd != jw) begin
+						ds     <= dj.s;
+						de     <= dj.e;
+						dpx    <= dj.px;
+						d_on   <= 1'b1;
+						d_skip <= 1'b0;
+					end
+				end else if (!d_skip) begin
+					if (head_ok) begin
+						if (pen != 4'hf) begin
+							lb_we     <= 1'b1;
+							lb_shadow <= (pen == 4'h0) && dj.shadow;
+							lb_group  <= dj.group;
+							lb_x      <= dpx[7:0];
+							lb_d      <= {dj.color, pen};
+						end
+						ds  <= s_nx;
+						de  <= e_nx;
+						dpx <= dpx + 9'd1;
+						if (s_nx >= dj.wsrc || dpx == 9'd255) begin
+							// the record ends: discard the rest of its granules
+							pop     = 1'b1;
+							d_skip <= 1'b1;
+							kill   <= 1'b1;
+						end else if (tx_nx[7:4] != d_tx[7:4])
+							pop = 1'b1;
+					end
+				end else if (head_mine) begin
+					if (r_full[rp]) pop = 1'b1;
+				end else if (fdone[jd[1:0]]) begin
+					jd     <= jd + 3'd1;
+					d_on   <= 1'b0;
+					d_skip <= 1'b0;
+				end
+
+				if (pop) rp <= rp + 3'd1;
+				r_cnt <= r_cnt + {3'd0, push} - {3'd0, pop};
+			end
 
 			for (int k = 0; k < 4; k++)
-				if (sl_busy[k] && gfx_valid[k]) begin
-					sl_gran[k] <= gfx_rdata[k];
-					sl_full[k] <= 1'b1;
-					sl_busy[k] <= 1'b0;
+				if (p_busy[k] && gfx_valid[k]) begin
+					r_gran[p_ent[k]] <= gfx_rdata[k];
+					r_full[p_ent[k]] <= 1'b1;
+					p_busy[k]        <= 1'b0;
 				end
 		end
 	end

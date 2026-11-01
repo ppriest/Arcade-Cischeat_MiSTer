@@ -20,7 +20,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
-from mame_capture import (NO_WINDOW, check_lua_error, lua_env, lua_runner_env,  # noqa: E402
+from coretools import (NO_WINDOW, check_lua_error, lua_env, lua_runner_env,  # noqa: E402
                           mame_cmd, mame_paths, regions)
 
 

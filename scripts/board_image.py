@@ -3,7 +3,8 @@
 """Assemble a set's SDRAM contents, as the loader leaves them, from MAME region dumps.
 
 The layout is docs/ROADMAP.md's SDRAM map. Every region comes from MAME after machine
-init, so the sound bitswap and the sprite untangle are already applied. Output is one
+init, so the sound bitswap and the sprite untangle are already applied; the scroll
+regions are put in the loader's tile-pair layout (scripts/tile_layout.py). Output is one
 16-bit word per line for $readmemh, words 0 .. 0x0f00000/2.
 
 CPU regions are dumped in host (little-endian) word order and stored as their 68000
@@ -15,6 +16,8 @@ word value. Graphics regions are byte-wide: the even byte goes in bits [7:0].
 """
 import argparse
 from pathlib import Path
+
+from tile_layout import pair_tiles
 
 REPO = Path(__file__).resolve().parent.parent
 SRC = REPO / "debug" / "rom_regions"
@@ -48,7 +51,14 @@ def main():
 
     img = bytearray(TOP)          # little-endian words, as $readmemh will see them
     for addr, name, size in LAYOUT:
-        data = (SRC / f"{args.game}_{name}.bin").read_bytes()[:size]
+        src = SRC / f"{args.game}_{name}.bin"
+        if name == "iocpu" and not src.exists():
+            continue                  # only F-1 Grand Prix Star II and Wild Pilot have one
+        data = src.read_bytes()[:size]
+        if name == "road1" and data == (SRC / f"{args.game}_road0.bin").read_bytes()[:len(data)]:
+            continue                      # Big Run and Cisco Heat: road1 reads road0's copy
+        if name.startswith("scroll"):
+            data = pair_tiles(data)
         if not data:
             raise SystemExit(f"{name}: empty dump")
         img[addr:addr + len(data)] = data

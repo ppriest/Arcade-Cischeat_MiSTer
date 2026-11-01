@@ -3,18 +3,23 @@
 // raw_word is the loader's little-endian word: image byte 2k in bits 7..0. The
 // .mra holds the CPU programs in 68000 order (even byte first), and the board
 // reads an SDRAM word as the 68000 word, so every word below CPU_TOP is byte
-// swapped; the sound program is also bitswapped by the gate array's
-// rom_decode, GS88000 on Cisco Heat and D65006 on the others
-// (ms1_gatearray.cpp, megasys1_gatearray_*_device::rom_decode). The gfx
+// swapped; on Big Run (D65006) and Cisco Heat (GS88000) the sound program is
+// also bitswapped by the gate array's rom_decode (ms1_gatearray.cpp,
+// megasys1_gatearray_*_device::rom_decode). The F1 GP Star family and Wild Pilot
+// have no gate array (cischeat.cpp 1818-1841) and a plaintext sound ROM. The gfx
 // regions are byte-wide, even byte in bits 7..0 as loaded; the sprites are
-// untangled.
+// untangled. In the scroll regions offset bits 6:2 move so one granule holds
+// row py of 8x8 codes c and c+2, both halves of a 16x16 tile's row
+// (scripts/tile_layout.py): new[2] = old[6], new[5:3] = old[4:2], new[6] = old[5].
 module cischeat_rom_transform #(
 	parameter logic [25:0] CPU_TOP     = 26'h02c0000,
 	parameter logic [25:0] SOUND_BASE  = 26'h0280000,
 	parameter logic [25:0] SOUND_BYTES = 26'h0040000,
+	parameter logic [25:0] SCROLL_BASE = 26'h02c0000,   // scroll0..2, up to SPRITE_BASE
 	parameter logic [25:0] SPRITE_BASE = 26'h0400000,
 	parameter logic [25:0] SPRITE_BYTES = 26'h0600000
 ) (
+	input  logic        gatearray,      // the set has a gate array
 	input  logic        gs88000,        // Cisco Heat's gate array, else D65006
 	input  logic [25:0] raw_addr,
 	input  logic [15:0] raw_word,
@@ -60,7 +65,7 @@ module cischeat_rom_transform #(
 							 + {4'b0, sprite_byte_in_block[6], 1'b0}
 							 + {5'b0, sprite_col[1]};
 
-		if ((raw_addr >= SOUND_BASE) && (raw_addr < SOUND_BASE + SOUND_BYTES)) begin
+		if (gatearray && (raw_addr >= SOUND_BASE) && (raw_addr < SOUND_BASE + SOUND_BYTES)) begin
 			if (sound_word_index < 26'h4000 || (sound_word_index >= 26'h8000 && sound_word_index < 26'hC000))
 				order = ((sound_word_index | 26'h124) != sound_word_index) ? swap0 : swap1;
 			else if (sound_word_index >= 26'h4000 && sound_word_index < 26'h8000)
@@ -71,6 +76,8 @@ module cischeat_rom_transform #(
 				order = swap2;
 			decoded_be = bitswap16(source_be, order);
 			xf_data = decoded_be;
+		end else if ((raw_addr >= SCROLL_BASE) && (raw_addr < SPRITE_BASE)) begin
+			xf_addr = {raw_addr[25:7], raw_addr[5], raw_addr[4:2], raw_addr[6], raw_addr[1:0]};
 		end else if ((raw_addr >= SPRITE_BASE)
 				 && (raw_addr < SPRITE_BASE + SPRITE_BYTES)) begin
 			// Each source word stays intact; only its destination within the

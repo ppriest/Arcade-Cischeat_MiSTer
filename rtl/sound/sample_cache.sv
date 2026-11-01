@@ -34,7 +34,7 @@ module sample_cache #(
 	output logic        valid,
 	output logic [7:0]  data,
 
-	// granule side (one sdram_arbiter consumer port)
+	// granule side (one SDRAM client port)
 	output logic        g_req,
 	output logic [25:0] g_addr,
 	input  logic        g_valid,
@@ -81,7 +81,7 @@ module sample_cache #(
 		end
 	end
 
-	// Byte k of a granule is g_data[8*k +: 8]: sdram.sv puts word 0 in
+	// Byte k of a granule is g_data[8*k +: 8]: the SDRAM controller puts word 0 in
 	// bits [15:0] with the even byte in the low half, so a granule is
 	// little-endian across all eight bytes.
 	wire [63:0] serve_word = (st == S_FILL) ? g_data : cdata_q;

@@ -58,16 +58,12 @@ Vendoring alone does not touch behaviour, so there is no regression to establish
 
 ---
 
-## SDRAM controller and stack - no carried unit bench; hardware-proven
+## SDRAM controller - written for this core; `sim/sdram_tb`
 
-`rtl/memory/` and `rtl/memory/sdram/` are the Fuuki stack copied through Seta, unmodified. The
-burst-4 read extension was proved on real DE10-nano hardware in `Arcade-Psikyo_MiSTer` against a
-command-decoding chip model; the sibling trees do not carry that bench alongside the controller,
-and re-deriving it here would test a copy, not the code.
-
-Phase 0 instead drives this stack from the five-CPU harness behind a behavioural SDRAM model in
-`rtl/synth_check/`, which is the integration the CPUs actually see. The controller's own timing is
-not re-litigated.
+The Fuuki/Seta stack (`sdram.sv`, `sdram_phy.sv`, `sdram_arbiter.sv`) is replaced by
+`rtl/memory/sdram_sched.sv`, a bank-interleaved controller and arbiter written here. Its bench is
+`sim/sdram_tb` on `sim/common/sdram_chip_model_timed.sv`, which checks the command timing, the DQM
+masking and the data; `sim/rom_load_tb` checks the write path end to end.
 
 ---
 

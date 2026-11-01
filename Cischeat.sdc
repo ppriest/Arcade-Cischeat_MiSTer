@@ -28,8 +28,8 @@ set_input_delay -clock sdram_clk_pin -max [expr {$sdram_tAC + $sdram_board}]    
 set_input_delay -clock sdram_clk_pin -min [expr {$sdram_tOH + $sdram_board_min}] [get_ports {SDRAM_DQ[*]}]
 
 # The first beat is captured on the second clk_mem edge after the memory's
-# launch edge (sdram.sv's dq_in; Seta.sdc measured the arrival).
-set sdram_dq_regs [get_registers {*sdram:u_sdram|dq_in[*]}]
+# launch edge (sdram_sched.sv's dq_in; Seta.sdc measured the arrival).
+set sdram_dq_regs [get_registers {*sdram_sched:u_sched|dq_in[*]}]
 set_multicycle_path -setup 2 -from [get_clocks {sdram_clk_pin}] -to $sdram_dq_regs
 set_multicycle_path -hold  1 -from [get_clocks {sdram_clk_pin}] -to $sdram_dq_regs
 

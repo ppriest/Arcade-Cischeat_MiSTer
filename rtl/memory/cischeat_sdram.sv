@@ -1,18 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The board's memory clients on the SDRAM: five CPU ports and nine gfx clients
-// in the clk (48 MHz) domain, one sdram_arbiter -> sdram_phy -> sdram.sv on
-// clk_mem (96 MHz, 2 x clk, same PLL, rising edges aligned).
-//
-// At 48 MHz the stack serves 200 granules a line against the board's 293
-// (docs/PHASE2.md, step 4); sdram.sv spends 11 of its clocks per granule
-// whatever the clock, so it runs at 96.
+// in the clk (48 MHz) domain, onto sdram_sched (bank-interleaved, clk_mem 96 MHz,
+// 2 x clk, same PLL, rising edges aligned).
 //
 // Crossing: a client's request is a level from a clk register, held until its
-// valid; the arbiter captures its rising edge. The arbiter's one-cycle valid is
+// valid; the scheduler captures its rising edge. Its one-cycle valid is
 // stretched to two clk_mem cycles, which covers exactly one clk edge, and is
-// registered there with the arbiter's shared read data (held until the next
-// granule, 11 or more clk_mem cycles later).
+// registered there with the shared read data (held until the next granule
+// returns, 4 or more clk_mem cycles later).
 //
 // CPU ports (clk): a request is a rising edge of ext_req; ext_ready is one
 // clock. Each port keeps the last granule it read (ready the next clock), so the
@@ -27,6 +23,13 @@
 //
 // Sample clients (clk, the two OKI caches): snd_req is held until snd_valid,
 // one clock with snd_rdata; a request is its rising edge.
+//
+// Bank remap: every address goes to the scheduler with bits 4:3 XORed with bits
+// 8:7 (swz, its own inverse). The gfx regions hold 128-byte tiles of 16 eight-byte
+// rows, so bits 4:3 are a tile's row and a line's fetches along one row would all
+// land in one bank, one every tRC; with the tile code's low bits in the bank they
+// interleave. The download goes through the same remap, so the layout is unchanged
+// for every client.
 //
 // Word k of a granule is bits 16k+15..16k, the word at the granule's address
 // plus 2k; in a word, bits 15..8 are the 68000's even byte.
@@ -77,6 +80,10 @@ module cischeat_sdram (
 
 	localparam int N = 16;              // 0-4 CPU ports, 5-13 gfx, 14-15 samples
 
+	function automatic logic [25:0] swz(input logic [25:0] a);
+		return {a[25:5], a[4:3] ^ a[8:7], a[2:0]};
+	endfunction
+
 	// ---- clk side: requests ------------------------------------------
 	logic [N-1:0]  req;                 // to the arbiter, held until valid
 	logic [25:0]   addr [N];
@@ -105,6 +112,8 @@ module cischeat_sdram (
 			logic [14:0]  c_tq;
 			logic         look, fill_we;
 			logic [25:1]  la;
+			logic [25:0]  ra;            // the request's own address (swz undone)
+			assign ra = swz(addr[gp]);
 			logic [7:0]   fill_i;
 			logic [63:0]  fill_d;
 			logic [14:0]  fill_t;
@@ -129,7 +138,7 @@ module cischeat_sdram (
 				end else if (ext_req[gp] && !ext_req_d[gp]) begin
 					if (ext_we[gp]) begin
 						req[gp]  <= 1'b1;
-						addr[gp] <= {ext_addr[gp], ext_be[gp] == 2'b10};
+						addr[gp] <= swz({ext_addr[gp], ext_be[gp] == 2'b10});
 						we[gp]   <= 1'b1;
 						we16[gp] <= ext_be[gp] == 2'b11;
 						wd[gp]   <= ext_be[gp] == 2'b10 ? {8'h00, ext_wdata[gp][15:8]} : ext_wdata[gp];
@@ -152,7 +161,7 @@ module cischeat_sdram (
 						ext_ready[gp] <= 1'b1;
 					end else begin
 						req[gp]  <= 1'b1;
-						addr[gp] <= {la[25:3], 3'b000};
+						addr[gp] <= swz({la[25:3], 3'b000});
 						we[gp]   <= 1'b0;
 						g_ok[gp] <= 1'b0;
 					end
@@ -161,14 +170,14 @@ module cischeat_sdram (
 					ext_ready[gp] <= 1'b1;
 					if (!we[gp]) begin
 						g_ok[gp]      <= 1'b1;
-						g_tag[gp]     <= addr[gp][25:3];
+						g_tag[gp]     <= ra[25:3];
 						g_data[gp]    <= rdata;
 						ext_rdata[gp] <= rdata[16 * ext_addr[gp][2:1] +: 16];
 						fill_we       <= 1'b1;
-						fill_i        <= addr[gp][10:3];
+						fill_i        <= ra[10:3];
 						fill_d        <= rdata;
-						fill_t        <= addr[gp][25:11];
-						c_ok[addr[gp][10:3]] <= 1'b1;
+						fill_t        <= ra[25:11];
+						c_ok[ra[10:3]] <= 1'b1;
 					end
 				end
 			end
@@ -183,7 +192,7 @@ module cischeat_sdram (
 				req[5 + c] <= 1'b0;
 			else if (gfx_req[c]) begin
 				req[5 + c]  <= 1'b1;
-				addr[5 + c] <= {gfx_addr[c][25:3], 3'b000};
+				addr[5 + c] <= swz({gfx_addr[c][25:3], 3'b000});
 			end else if (req[5 + c] && valid[5 + c]) begin
 				req[5 + c]   <= 1'b0;
 				gfx_valid[c] <= 1'b1;
@@ -202,7 +211,7 @@ module cischeat_sdram (
 				req[14 + c] <= 1'b0;
 			else if (snd_req[c] && !snd_req_d[c]) begin
 				req[14 + c]  <= 1'b1;
-				addr[14 + c] <= {snd_addr[c][25:3], 3'b000};
+				addr[14 + c] <= swz({snd_addr[c][25:3], 3'b000});
 			end else if (req[14 + c] && valid[14 + c]) begin
 				req[14 + c]  <= 1'b0;
 				snd_valid[c] <= 1'b1;
@@ -241,41 +250,15 @@ module cischeat_sdram (
 		if (|(a_valid | a_valid_d)) rdata <= a_rdata;
 	end
 
-	logic        phy_req, phy_we, phy_we16, phy_busy, phy_valid;
-	logic [25:0] phy_addr;
-	logic [15:0] phy_wdata;
-	logic [63:0] phy_rdata;
-
-	// sprites (gfx clients 5-8, ports 10-13) only when nothing else waits: their
-	// engine has a cutoff, the tilemaps and roads do not
-	sdram_arbiter #(.N(N), .LOW(16'h3c00)) u_arb (
-		.clk(clk_mem), .reset(m_reset),
-		.phy_req, .phy_we, .phy_we16, .phy_addr, .phy_wdata, .phy_busy, .phy_valid, .phy_rdata,
+	// sprites (gfx clients 5-8, ports 10-13) only when nothing else can be served:
+	// their engine has a cutoff, the tilemaps and roads do not
+	sdram_sched #(.N(N), .LOW(16'h3c00)) u_sched (
+		.clk(clk_mem), .reset(m_reset), .init,
 		.c_req(req), .c_addr(a_addr), .c_we(a_we), .c_we16(a_we16), .c_wdata(a_wdata),
 		.c_valid(a_valid), .c_rdata(a_rdata),
-		.dl_req, .dl_addr, .dl_data, .dl_we16, .dl_busy
-	);
-
-	logic [25:1] p_addr;
-	logic        p_wrl, p_wrh, p_req, p_ack;
-	logic [15:0] p_din;
-	logic [63:0] p_dout;
-
-	sdram_phy u_phy (
-		.clk(clk_mem), .reset(m_reset),
-		.port_addr(p_addr), .port_wrl(p_wrl), .port_wrh(p_wrh), .port_din(p_din),
-		.port_dout(p_dout), .port_req(p_req), .port_ack(p_ack),
-		.req(phy_req), .we(phy_we), .we16(phy_we16), .addr(phy_addr), .wdata(phy_wdata),
-		.busy(phy_busy), .valid(phy_valid), .rdata(phy_rdata)
-	);
-
-	sdram u_sdram (
+		.dl_req, .dl_addr(swz(dl_addr)), .dl_data, .dl_we16, .dl_busy,
 		.SDRAM_DQ, .SDRAM_A, .SDRAM_DQML, .SDRAM_DQMH, .SDRAM_BA, .SDRAM_nCS, .SDRAM_nWE,
-		.SDRAM_nRAS, .SDRAM_nCAS, .SDRAM_CLK(), .SDRAM_CKE,
-		.init, .clk(clk_mem),
-		.addr0(p_addr), .wrl0(p_wrl), .wrh0(p_wrh), .din0(p_din), .dout0(p_dout), .req0(p_req), .ack0(p_ack),
-		.addr1('0), .wrl1(1'b0), .wrh1(1'b0), .din1('0), .dout1(), .req1(1'b0), .ack1(),
-		.addr2('0), .wrl2(1'b0), .wrh2(1'b0), .din2('0), .dout2(), .req2(1'b0), .ack2()
+		.SDRAM_nRAS, .SDRAM_nCAS, .SDRAM_CKE
 	);
 
 endmodule

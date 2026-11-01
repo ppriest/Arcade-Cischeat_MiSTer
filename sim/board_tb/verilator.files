@@ -52,9 +52,7 @@ rtl/video/cischeat_video.sv
 rtl/cischeat_timing.sv
 rtl/state/state_engine.sv
 rtl/cischeat_board.sv
-rtl/memory/sdram/sdram.sv
-rtl/memory/sdram_phy.sv
-rtl/memory/sdram_arbiter.sv
+rtl/memory/sdram_sched.sv
 rtl/memory/cischeat_sdram.sv
-sim/common/sdram_chip_model_wide.sv
+sim/common/sdram_chip_model_timed.sv
 sim/board_tb/tb_board.sv

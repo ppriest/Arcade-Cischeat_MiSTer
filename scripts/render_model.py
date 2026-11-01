@@ -8,7 +8,7 @@
 
 ROM graphics are assembled from MAME ROM_START with scripts/build_region.py;
 RAM, palette, registers, road lists and the reference image come from
-scripts/mame_capture.py. This models MAME's screen_update_cischeat draw order.
+the mister MCP's mame_capture. This models MAME's screen_update_cischeat draw order.
 """
 import argparse
 import functools

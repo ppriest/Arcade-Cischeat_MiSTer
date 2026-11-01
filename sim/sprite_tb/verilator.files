@@ -1,0 +1,4 @@
+// sprite engine against scripts/sprite_acc.py (ModelSim cannot compile rtl/memory/sdram_sched.sv, which run_sim.sh pulls in)
+-Wno-fatal
+rtl/video/jaleco_zoomspr_line.sv
+sim/sprite_tb/tb_sprite.sv

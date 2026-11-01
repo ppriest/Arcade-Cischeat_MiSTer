@@ -6,7 +6,8 @@
     python scripts/tmap_ref.py --list
     bash scripts/run_sim.sh ms1_tmap_tb      # reads debug/tmap_tb/cases.txt
 
-Each case directory holds vram.hex (8,192 words), gfx.hex (region bytes),
+Each case directory holds vram.hex (8,192 words), gfx.hex (region bytes in the
+loader's tile-pair layout, scripts/tile_layout.py),
 regs.txt (scroll_x scroll_y ctrl color5 code_mask, hex) and expect.hex: 256
 lines x 256 pixels of {color, pen}, from render_model's map_dimensions,
 tilemap_entry and tile getter -- the code that is compared with MAME.
@@ -24,6 +25,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import render_model as rm  # noqa: E402
+from tile_layout import pair_tiles  # noqa: E402
+from tile_layout import pair_tiles  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 OUT = REPO / "debug" / "tmap_tb"
@@ -62,7 +65,7 @@ def write_case(name, vram, regs, gfx, color5):
     folder.mkdir(parents=True, exist_ok=True)
     vram = np.resize(np.asarray(vram, dtype=np.uint16), 8192)
     (folder / "vram.hex").write_text("".join(f"{int(v):04x}\n" for v in vram))
-    (folder / "gfx.hex").write_text("".join(f"{b:02x}\n" for b in gfx))
+    (folder / "gfx.hex").write_text("".join(f"{b:02x}\n" for b in pair_tiles(bytes(gfx))))
     code_mask = len(gfx) // 32 - 1
     sx, sy, flag = regs
     (folder / "regs.txt").write_text(f"{sx:04x} {sy:04x} {flag:04x} {int(color5)} {code_mask:04x}\n")

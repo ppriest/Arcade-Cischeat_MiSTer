@@ -17,8 +17,9 @@
 // A sprite of priority p is drawn in passes p and p - 1; the second draw covers
 // the first, so it is kept once, in group max(p - 1, 0) (cischeat_video).
 //
-// F1 GP Star, screen_update_f1gpstar (460-488), backdrop pen 0, road1 before road0:
-//   road1 6..7 opaque; road0 6..7; tmap0; tmap1; road1 1..5; road0 1..5;
+// F1 GP Star, screen_update_f1gpstar (460-488), backdrop road0's colour base,
+// road1 before road0:
+//   road1 6..7; road0 6..7; tmap0; tmap1; road1 1..5; road0 1..5;
 //   sprites 2..7 (group 0); road1 0; road0 0; sprites 1 (1); tmap2; sprites 0 (2)
 // A zooming road leaves pixels no tile reaches (covered = 0); MAME draws nothing
 // there, opaque pass or not.
@@ -94,8 +95,8 @@ module cischeat_mixer (
 		end
 		v_br = tmap(v_br, tmap2, BR_TMAP2);
 
-		v_f1 = 15'd0;
-		v_f1 = road(v_f1, road1, road1_pri, 3'd6, 3'd7, 1'b1, F1_ROAD1);
+		v_f1 = {1'b0, F1_ROAD0};
+		v_f1 = road(v_f1, road1, road1_pri, 3'd6, 3'd7, 1'b0, F1_ROAD1);
 		v_f1 = road(v_f1, road0, road0_pri, 3'd6, 3'd7, 1'b0, F1_ROAD0);
 		v_f1 = tmap(v_f1, tmap0, F1_TMAP0);
 		v_f1 = tmap(v_f1, tmap1, F1_TMAP1);

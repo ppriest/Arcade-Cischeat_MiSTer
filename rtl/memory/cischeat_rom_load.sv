@@ -10,7 +10,8 @@
 module cischeat_rom_load (
 	input  logic         clk,           // clk_mem
 	input  logic         reset,
-	input  logic         gs88000,       // sound program bitswap: Cisco Heat's gate array
+	input  logic         gatearray,     // sound program bitswap: Big Run and Cisco Heat only
+	input  logic         gs88000,       // Cisco Heat's gate array, else D65006
 
 	input  logic         start,         // pulse: copy length bytes
 	input  logic [27:0]  length,
@@ -55,6 +56,6 @@ module cischeat_rom_load (
 		.dl_req, .dl_addr, .dl_data, .dl_we16, .dl_busy
 	);
 
-	cischeat_rom_transform u_xf (.gs88000, .raw_addr, .raw_word, .xf_addr, .xf_data);
+	cischeat_rom_transform u_xf (.gatearray, .gs88000, .raw_addr, .raw_word, .xf_addr, .xf_data);
 
 endmodule

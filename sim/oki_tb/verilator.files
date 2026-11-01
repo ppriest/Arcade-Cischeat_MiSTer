@@ -1,0 +1,17 @@
+// cischeat_oki (both jt6295, bridge, sample cache) on a behavioural granule memory
+-Wno-fatal
++incdir+rtl/sound/jt6295/hdl
+rtl/sound/jt6295/hdl/jt6295.v
+rtl/sound/jt6295/hdl/jt6295_acc.v
+rtl/sound/jt6295/hdl/jt6295_adpcm.v
+rtl/sound/jt6295/hdl/jt6295_ctrl.v
+rtl/sound/jt6295/hdl/jt6295_rom.v
+rtl/sound/jt6295/hdl/jt6295_serial.v
+rtl/sound/jt6295/hdl/jt6295_sh_rst.v
+rtl/sound/jt6295/hdl/jt6295_timing.v
+rtl/sound/jt6295/hdl/jt12_comb.v
+rtl/sound/jt6295/hdl/jt12_interpol.v
+rtl/sound/oki_rom_bridge.sv
+rtl/sound/sample_cache.sv
+rtl/sound/cischeat_oki.sv
+sim/oki_tb/tb_oki.sv

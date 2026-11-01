@@ -299,6 +299,14 @@ a set the hardware refuses.
   BallySente's fake Flip Screen DIP at bit 32 with `default="...,FF,FE"` therefore started On in
   all 40 sets. Keep every DIP, real or fake, in bits 0-31; check a generated default by applying
   that arithmetic, not by reading the hex.
+- **[Cischeat] A load-time transform applies per set exactly where MAME's machine config has the
+  device, and its bench covers every variant.** The sound-ROM bitswap was applied to every set; only
+  Big Run and Cisco Heat have a gate array (`cischeat.cpp` 1818-1841), and the F1 GP Star family's
+  sound ROM is plaintext. Its sound 68000 read SSP `0x18064000` and an odd PC, took an address
+  error through an odd vector and halted: instance H read 24 accesses ending at `0x00000e`. The
+  board bench missed it because its image is MAME's post-init memory, and `rom_load_tb` ran
+  Cisco Heat only. Decode the first vectors of each set's raw ROM with the RTL's rule and compare
+  them against MAME's.
 
 ## ROM formats
 
@@ -466,6 +474,36 @@ of its clocks a granule, 15.3 with the phy and arbiter handshakes, 200 a line. T
 293 in play and the SDRAM went to 96 MHz. A bench of the real stack on a command-decoding chip
 model with every client always asking gives the number in seconds (`sim/sdram_tb`); run it before
 the budget, not after the RTL.
+
+### [Cischeat] Overlap banks with the bank in the low address bits, and check DQM against the row
+
+Bank-interleaving the same chip (ACTIVE to one bank while another bursts, READ with
+auto-precharge every 4 clocks) took the same bench from 401 to 1,347 granules a line at 96 MHz.
+Two things a one-burst-at-a-time controller never meets:
+
+- `sys` and Sorgelig's controller drive `DQML`/`DQMH` from `SDRAM_A[12:11]`, as some modules wire
+  them. DQM masks read data two clocks later, so an ACTIVE whose row has bit 11 or 12 set, issued
+  while a burst is in flight, blanks a word. Hold such an ACTIVE until 4 clocks after the last
+  READ, and drive `A[12:11]` low on every other command.
+- A command-decoding chip model that serves one burst at a time cannot check this. The model
+  needs overlapping bursts, DQM masking and the tRCD/tRP/tRAS/tRC/tRRD/tRFC/bus-turnaround checks
+  (`sim/common/sdram_chip_model_timed.sv`). Mutate the controller (DQM gap 2, bank wait 6) and see
+  the model fail before trusting its pass.
+
+A round-robin that skips a client whose bank is busy and then moves its pointer past the client
+it served starves the skipped one: worst wait 791 clocks with ten clients. Move the pointer only
+when the pick was the first pending client; the worst wait fell to 135 (`sim/sdram_tb`).
+
+### [Cischeat] Put the tile code in the bank bits, not the tile's row
+
+With the bank in address bits 4:3 and graphics stored as 128-byte tiles of eight-byte rows, bits
+4:3 are the row inside the tile. A line fetches one row of many tiles, so every granule of it went
+to the same bank, one per tRC, however many ports were in flight: on hardware a cut line fetched
+526 granules at 16 clocks each with 3.2 of 4 ports busy (an ISSP counter of fetches in flight per
+clock, divided by granules, gives the mean latency). XORing the tile code's low bits (8:7) into
+the bank, for every client and the download alike, removed every cut line. `sdram_tb` cannot
+show this: its clients ask for spread addresses. Check which address bits a line's fetches vary
+in before choosing the bank bits.
 
 ### Size a prefetch buffer for correlated consumers, not average bandwidth
 

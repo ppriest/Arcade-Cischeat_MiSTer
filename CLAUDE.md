@@ -12,12 +12,15 @@ MiSTer arcade core for Cischeat. Built with the `mister-arcade-core` skill.
 ## Rules
 
 - Never touch `sys/`.
-- Build with `python scripts/build_staged.py`, never in the tree. Commit first; it
-  refuses a dirty tree.
-- No JTAG while Quartus runs, and the reverse. Use `scripts/read_issp.py` and
-  `scripts/probe.py`, which take `hwlock.py`.
-- Deploy only with `scripts/deploy.py`. Launch and screenshot with `scripts/hw.py`,
-  `--native` for pixel comparison. Deploying is always fine; launching or resetting takes the
+- All builds, probes, MAME runs and MiSTer access go through the `mister` MCP tools, which run
+  the server's scripts; the core keeps no copies of them. After any change to
+  `scripts/core.json` or `scripts/issp_fields.tcl`, call `core_register`: the tools refuse
+  while either differs from the registered copy.
+- Build with `build_start`, never in the tree. Commit first; it refuses a dirty tree.
+- No JTAG while Quartus runs, and the reverse. Read probes with `probe_*`, which take the
+  JTAG lock.
+- Deploy only with `mister_deploy`. Launch with `mister_launch`, screenshot with
+  `mister_screenshot` (native for pixel comparison). Deploying is always fine; launching or resetting takes the
   board from whoever is using it, so only when asked. Announce long compiles: they block every
   session's JTAG (`docs/WORKFLOW.md`, section 2a). JTAG has priority: a session waiting for the
   Blaster reserves it, and no new build or simulation starts while that reservation stands
